@@ -1,0 +1,6 @@
+requests
+pymongo
+PyYAML
+colorama
+tldextract
+dnsgen
