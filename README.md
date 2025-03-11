@@ -220,6 +220,11 @@ watchtower --show-httpx company1 --status 200 --title admin
 watchtower --show-new company1
 ```
 
+#### With Filters
+```bash
+watchtower --show-new company1 --status 200 --title admin
+```
+
 ### Update Project From GitHub
 ```bash
 watchtower --update
