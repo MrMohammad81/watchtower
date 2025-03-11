@@ -72,9 +72,11 @@ class MongoManager:
         logger.success(f"Finished processing httpx results. Changes detected: {len(changes)}")
         return changes
 
-    def get_httpx_data(self):
-        # Return all stored httpx results excluding the MongoDB ObjectID
-        return list(self.httpx.find({}, {"_id": 0}))
+    def get_httpx_data(self, query=None):
+        if query is None:
+            query = {}
+
+        return list(self.httpx.find(query, {"_id": 0}))
 
     def close(self):
         # Close the MongoDB connection

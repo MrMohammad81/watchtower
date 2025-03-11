@@ -62,8 +62,14 @@ def main_cli():
     parser.add_argument("-u", "--domain", help="Single domain to scan")
     parser.add_argument("--targets-file", help="Path to targets YAML file")
     parser.add_argument("--threads", type=int, help="Number of threads")
-    parser.add_argument("--show-httpx", metavar="COMPANY", help="Show all httpx results for a company")
     parser.add_argument("--update", action="store_true", help="Update Watchtower from GitHub")
+
+    #  New filtter for --show-httpx
+    parser.add_argument("--show-httpx", metavar="COMPANY", help="Show all httpx results for a company")
+    parser.add_argument("--status", type=str, help="Filter by status code (e.g., 200)")
+    parser.add_argument("--title", type=str, help="Filter by title keyword (e.g., admin)")
+    parser.add_argument("--tech", type=str, help="Filter by technology (e.g., wordpress)")
+    parser.add_argument("--url", type=str, help="Filter by URL keyword (e.g., login)")
 
     args = parser.parse_args()
 
@@ -77,15 +83,40 @@ def main_cli():
         run_update()
         sys.exit(0)
 
+    # Handle --show-httpx with filters
     if args.show_httpx:
         company_name = args.show_httpx
         processor = DomainProcessor("", company_name)
-        results = processor.mongo.get_httpx_data()
-        for res in results:
-            logger.info(f"{res['url']} [{res['status']}] {res['title']} {res['tech']}")
+
+        # Building a query for MongoDB filter
+        query = {}
+
+        if args.status:
+            query["status"] = str(args.status)
+
+        if args.title:
+            query["title"] = {"$regex": args.title, "$options": "i"}
+
+        if args.tech:
+            query["tech"] = {"$elemMatch": {"$regex": args.tech, "$options": "i"}}
+
+        if args.url:
+            query["url"] = {"$regex": args.url, "$options": "i"}
+
+        logger.info(f"Running query filter: {query}")
+
+        results = processor.mongo.get_httpx_data(query=query)
+
+        if not results:
+            logger.warning("No results found with the given filters.")
+        else:
+            for res in results:
+                logger.info(f"{res['url']} [{res['status']}] {res['title']} {res['tech']}")
+
         processor.mongo.close()
         sys.exit(0)
 
+    #  Single domain scan
     if args.domain:
         extracted = tldextract.extract(args.domain)
         company_name = extracted.domain
@@ -94,6 +125,7 @@ def main_cli():
         logger.success("Single scan completed!")
         sys.exit(0)
 
+    #  Batch scan from targets file
     if args.targets_file:
         companies = parse_targets_file(args.targets_file)
 
