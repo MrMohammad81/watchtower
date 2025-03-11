@@ -7,6 +7,7 @@ from utils import logger
 from config import settings
 from concurrent.futures import ThreadPoolExecutor
 import subprocess
+import sys
 
 def parse_targets_file(yaml_file):
     try:
@@ -74,7 +75,7 @@ def main_cli():
     # Handle --update option
     if args.update:
         run_update()
-        return
+        sys.exit(0)
 
     if args.show_httpx:
         company_name = args.show_httpx
@@ -83,7 +84,7 @@ def main_cli():
         for res in results:
             logger.info(f"{res['url']} [{res['status']}] {res['title']} {res['tech']}")
         processor.mongo.close()
-        return
+        sys.exit(0)
 
     if args.domain:
         extracted = tldextract.extract(args.domain)
@@ -91,7 +92,7 @@ def main_cli():
         logger.info(f"Running single domain scan: {args.domain} (company name: {company_name})")
         process_domain(args.domain, company_name)
         logger.success("Single scan completed!")
-        return
+        sys.exit(0)
 
     if args.targets_file:
         companies = parse_targets_file(args.targets_file)
@@ -100,6 +101,8 @@ def main_cli():
             executor.map(process_company_targets, companies)
 
         logger.success("Batch scan completed!")
-        return
+        sys.exit(0)
 
+    # If no valid argument provided
     parser.error("You must provide --targets-file or -u or --show-httpx")
+    sys.exit(1)
