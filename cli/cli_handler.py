@@ -6,6 +6,7 @@ from core.subdomain_fetcher import SubdomainFetcher
 from utils import logger
 from config import settings
 from concurrent.futures import ThreadPoolExecutor
+import subprocess
 
 def parse_targets_file(yaml_file):
     try:
@@ -15,6 +16,21 @@ def parse_targets_file(yaml_file):
     except Exception as e:
         logger.error(f"Failed to load targets file: {e}")
         return []
+
+def run_update():
+    logger.info("Checking for updates from GitHub...")
+    try:
+        result = subprocess.run(["git", "pull"], cwd="/usr/local/watchtower", capture_output=True, text=True)
+
+        if result.returncode == 0:
+            logger.success("Project updated successfully!")
+            print(result.stdout)
+        else:
+            logger.error("Failed to update project:")
+            print(result.stderr)
+
+    except Exception as e:
+        logger.error(f"Error during update: {e}")
 
 def process_domain(domain, company_name):
     fetcher = SubdomainFetcher()
@@ -41,12 +57,24 @@ def process_company_targets(company):
 
 def main_cli():
     parser = argparse.ArgumentParser(description="Watchtower Subdomain Recon Tool")
+
     parser.add_argument("-u", "--domain", help="Single domain to scan")
-    parser.add_argument("--threads", type=int, help="Number of threads to use (override settings)")
     parser.add_argument("--targets-file", help="Path to targets YAML file")
+    parser.add_argument("--threads", type=int, help="Number of threads")
     parser.add_argument("--show-httpx", metavar="COMPANY", help="Show all httpx results for a company")
+    parser.add_argument("--update", action="store_true", help="Update Watchtower from GitHub")
 
     args = parser.parse_args()
+
+    # Dynamic thread override
+    if args.threads:
+        settings.THREADS = args.threads
+        logger.info(f"Threads set to {settings.THREADS} from CLI argument")
+
+    # Handle --update option
+    if args.update:
+        run_update()
+        return
 
     if args.show_httpx:
         company_name = args.show_httpx
@@ -56,11 +84,6 @@ def main_cli():
             logger.info(f"{res['url']} [{res['status']}] {res['title']} {res['tech']}")
         processor.mongo.close()
         return
-    
-    if args.threads:
-        settings.THREADS = args.threads
-        logger.info(f"Threads set to {settings.THREADS} from CLI argument")
-
 
     if args.domain:
         extracted = tldextract.extract(args.domain)

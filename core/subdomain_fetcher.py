@@ -4,17 +4,34 @@ import json
 import re
 from utils import logger
 from config import settings
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
 
 class SubdomainFetcher:
     def __init__(self):
         self.shodan_api_key = settings.SHODAN_API_KEY
         self.chaos_api_key = settings.CHAOS_API_KEY
+        self.session = self.create_session_with_retries()
+
+    def create_session_with_retries(self):
+        session = requests.Session()
+        retries = Retry(
+            total=3,
+            backoff_factor=1,
+            status_forcelist=[429, 500, 502, 503, 504],
+            raise_on_status=False
+        )
+        adapter = HTTPAdapter(max_retries=retries)
+        session.mount('http://', adapter)
+        session.mount('https://', adapter)
+        return session
 
     def from_crtsh(self, domain):
         logger.info(f"[crt.sh] Fetching subdomains for {domain}")
         url = f"https://crt.sh/?q={domain}&output=json"
         try:
-            response = requests.get(url, timeout=10)
+            response = self.session.get(url, timeout=30)
             if response.status_code != 200:
                 logger.warning(f"[crt.sh] returned status {response.status_code} for {domain}")
                 return []
@@ -42,7 +59,7 @@ class SubdomainFetcher:
         except Exception as e:
             logger.error(f"[subfinder] Error: {e}")
             return []
-        
+
     def from_shodan(self, domain):
         logger.info(f"[shosubgo] Running for {domain}")
         try:
@@ -62,7 +79,7 @@ class SubdomainFetcher:
         logger.info(f"[urlscan.io] Fetching subdomains for {domain}")
         url = f"https://urlscan.io/api/v1/search/?q=domain:{domain}"
         try:
-            response = requests.get(url, timeout=10)
+            response = self.session.get(url, timeout=30)
             if response.status_code != 200:
                 logger.warning(f"[urlscan.io] returned status {response.status_code} for {domain}")
                 return []
@@ -83,7 +100,7 @@ class SubdomainFetcher:
         logger.info(f"[RapidDNS] Fetching subdomains for {domain}")
         url = f"https://rapiddns.io/s/{domain}?full=1&down=1#result"
         try:
-            response = requests.get(url, timeout=10)
+            response = self.session.get(url, timeout=30)
             if response.status_code != 200:
                 logger.warning(f"[RapidDNS] returned status {response.status_code} for {domain}")
                 return []
@@ -104,7 +121,7 @@ class SubdomainFetcher:
         logger.info(f"[subdomain.center] Fetching subdomains for {domain}")
         url = f"https://api.subdomain.center/?domain={domain}"
         try:
-            response = requests.get(url, timeout=10)
+            response = self.session.get(url, timeout=30)
             if response.status_code != 200:
                 logger.warning(f"[subdomain.center] returned status {response.status_code} for {domain}")
                 return []
@@ -132,7 +149,7 @@ class SubdomainFetcher:
         logger.info(f"[Wayback Machine] Fetching subdomains for {domain}")
         url = f"https://web.archive.org/cdx/search/cdx?url=*.{domain}&collaps=urlkey&fl=original"
         try:
-            response = requests.get(url, timeout=10)
+            response = self.session.get(url, timeout=30)
             if response.status_code != 200:
                 logger.warning(f"[Wayback Machine] returned status {response.status_code} for {domain}")
                 return []
@@ -172,7 +189,6 @@ class SubdomainFetcher:
 
         for sub in subdomains:
             sub = sub.strip().lower()
-
             if sub == domain or sub.endswith(f".{domain}"):
                 filtered.append(sub)
 
