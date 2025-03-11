@@ -1,7 +1,6 @@
-
 # 🛡️ Watchtower - Subdomain Recon & Monitoring Tool
 
-**Watchtower** is an automated subdomain reconnaissance tool designed to discover, scan, and monitor subdomains for changes.  
+**Watchtower** is an automated subdomain reconnaissance tool designed to discover, scan, and monitor subdomains for changes.
 It notifies you via Telegram and Discord when new subdomains are discovered or existing ones are updated.
 
 ---
@@ -16,6 +15,8 @@ It notifies you via Telegram and Discord when new subdomains are discovered or e
 - **Telegram & Discord notifications** for updates and alerts
 - Multi-threading for faster scans
 - YAML-based target management
+- Filter queries on stored subdomain results (status, title, tech, URL)
+- CSV export for large notifications
 
 ---
 
@@ -25,7 +26,7 @@ It notifies you via Telegram and Discord when new subdomains are discovered or e
 watchtower/
 ├── cli/                # CLI argument handler
 ├── config/             # Configuration files (resolvers, settings)
-├── core/               # Core logic (scanner, fetchers, mongo)
+├── core/               # Core logic (scanner, fetchers, mongo, processor)
 ├── utils/              # Logging & utility functions
 ├── data/               # Target YAML files directory
 ├── main.py             # Main entry point
@@ -174,9 +175,9 @@ In the `config/settings.py` file, set your MongoDB connection:
 MONGO_URI = "mongodb://admin:yourStrongPassword@localhost:27017/admin?authSource=admin"
 ```
 
-### 🗂️ Database Structure
+### 📂 Database Structure
 
-For each company (defined in `targets.yaml`), Watchtower creates a separate MongoDB database named `<company>_db`.  
+For each company (defined in `targets.yaml`), Watchtower creates a separate MongoDB database named `<company>_db`.
 Inside each database, it stores subdomain scan results in the `httpx_results` collection.
 
 Document example stored in MongoDB:
@@ -185,7 +186,8 @@ Document example stored in MongoDB:
     "url": "https://subdomain.example.com",
     "status": "200",
     "title": "Example Title",
-    "tech": ["nginx", "php"]
+    "tech": ["nginx", "php"],
+    "created_at": "2024-03-12T09:00:00"
 }
 ```
 
@@ -208,32 +210,37 @@ watchtower --targets-file data/targets.yaml --threads 10
 watchtower --show-httpx company1
 ```
 
+#### With Filters
+```bash
+watchtower --show-httpx company1 --status 200 --title admin
+```
+
+### Show Newly Added Subdomains (Last 24 Hours)
+```bash
+watchtower --show-new company1
+```
+
+### Update Project From GitHub
+```bash
+watchtower --update
+```
+
 ---
 
 ## 📢 Notifications
 
 ### Telegram Notifications
-- Get notified via Telegram Bot when:
-  - A first-time scan is completed (domain summary)
-  - New subdomains are discovered
-  - Existing subdomains change (status code, title, technologies)
+- First-time scan summaries
+- New subdomains discovered
+- Subdomain status/title/tech changes
+- CSV file attachment when too many results
 
 ### Discord Notifications
-- Discord notifications are sent to a configured webhook URL.
-- You will be notified about:
-  - New subdomains found
-  - Changes in subdomain details (status, title, technologies)
-  - Scan summaries (on first-time scans)
-
-To enable Discord notifications:
-1. Create a Discord webhook in your server settings.
-2. Add the webhook URL in your `settings.py`:
-   ```python
-   DISCORD_WEBHOOK_URL = "your_discord_webhook_url"
-   ```
+- Same as Telegram but via Discord webhook
 
 ---
 
 ## 👨‍💻 Author
 
 Made with ❤️ by **MohammadHossein Mohit**
+
