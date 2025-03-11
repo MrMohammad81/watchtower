@@ -82,7 +82,7 @@ class Scanner:
             temp_in.flush()
 
         out_file = tempfile.NamedTemporaryFile(delete=False).name
-        cmd = f"cat {temp_in.name} | dnsgen -f - | sort -u > {out_file}"
+        cmd = f"cat {temp_in.name} | dnsgen -f - > {out_file}"
         subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
 
         with open(out_file, 'r') as f:
