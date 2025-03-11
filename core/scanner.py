@@ -1,6 +1,7 @@
 import subprocess
 import tempfile
 import os
+import re
 from utils import logger
 from core.subdomain_fetcher import SubdomainFetcher
 
@@ -9,8 +10,45 @@ class Scanner:
         self.resolver_path = resolver_path
         self.fetcher = SubdomainFetcher()
 
+    def clean_domains(self, subdomains):
+        """
+        Clean and filter subdomains before running tools like massdns, dnsgen, etc.
+        """
+        clean_list = []
+
+        for d in subdomains:
+            if not d:
+                continue
+
+            d = d.strip().lower()
+
+            # Check for basic validity
+            if '.' not in d:
+                continue
+
+            # Skip full URLs
+            if d.startswith('http'):
+                continue
+
+            # Only allow valid DNS characters
+            if not re.match(r'^[a-z0-9.-]+$', d):
+                continue
+
+            clean_list.append(d)
+
+        unique_domains = list(set(clean_list))
+        logger.info(f"Cleaned {len(unique_domains)} valid subdomains out of {len(subdomains)} total")
+        return unique_domains
+
     def _run_massdns(self, input_list):
         logger.info("Running massdns...")
+
+        input_list = self.clean_domains(input_list)
+
+        if not input_list:
+            logger.warning("No valid subdomains to run massdns on!")
+            return []
+
         with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_in:
             temp_in.write('\n'.join(input_list))
             temp_in.flush()
@@ -32,6 +70,13 @@ class Scanner:
 
     def _run_dnsgen(self, subdomains):
         logger.info("Running dnsgen...")
+
+        subdomains = self.clean_domains(subdomains)
+
+        if not subdomains:
+            logger.warning("No valid subdomains to run dnsgen on!")
+            return []
+
         with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_in:
             temp_in.write('\n'.join(subdomains))
             temp_in.flush()
@@ -50,6 +95,13 @@ class Scanner:
 
     def _run_dnsx(self, subdomains):
         logger.info("Running dnsx...")
+
+        subdomains = self.clean_domains(subdomains)
+
+        if not subdomains:
+            logger.warning("No valid subdomains to run dnsx on!")
+            return []
+
         with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_in:
             temp_in.write('\n'.join(subdomains))
             temp_in.flush()
@@ -64,6 +116,13 @@ class Scanner:
 
     def _run_httpx(self, subdomains):
         logger.info("Running httpx...")
+
+        subdomains = self.clean_domains(subdomains)
+
+        if not subdomains:
+            logger.warning("No valid subdomains to run httpx on!")
+            return []
+
         with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_in:
             temp_in.write('\n'.join(subdomains))
             temp_in.flush()
@@ -77,6 +136,8 @@ class Scanner:
         return results
 
     def run_scan_chain(self, fetcher_results, domain):
+        logger.info(f"Starting scan chain for {domain}")
+
         massdns_1 = self._run_massdns(fetcher_results)
         massdns_1_filtered = self.fetcher.filter_in_scope(massdns_1, domain)
 
@@ -88,5 +149,7 @@ class Scanner:
 
         dnsx_out = self._run_dnsx(massdns_2_filtered)
         httpx_out = self._run_httpx(dnsx_out)
+
+        logger.success(f"Completed scan chain for {domain}")
 
         return httpx_out
