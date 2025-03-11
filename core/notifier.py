@@ -1,88 +1,84 @@
 import requests
+import os
 from utils import logger
 from config import settings
 
-class Notifier:
+class TelegramNotifier:
     def __init__(self):
-        self.telegram_bot_token = settings.TELEGRAM_BOT_TOKEN
-        self.telegram_chat_id = settings.TELEGRAM_CHAT_ID
-        self.discord_webhook = settings.DISCORD_WEBHOOK_URL
+        self.bot_token = settings.TELEGRAM_BOT_TOKEN
+        self.chat_id = settings.TELEGRAM_CHAT_ID
 
-    def send_telegram(self, message):
-        url = f"https://api.telegram.org/bot{self.telegram_bot_token}/sendMessage"
+    def send(self, message):
+        """Send text message to Telegram."""
+        url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
         payload = {
-            "chat_id": self.telegram_chat_id,
+            "chat_id": self.chat_id,
             "text": message,
             "parse_mode": "Markdown",
             "disable_web_page_preview": True
         }
-
         try:
             response = requests.post(url, json=payload, timeout=10)
             if response.status_code == 200:
-                logger.success("Telegram notification sent!")
+                logger.success("✅ Telegram message sent!")
             else:
-                logger.error(f"Telegram failed with status {response.status_code}: {response.text}")
+                logger.error(f"❌ Telegram error {response.status_code}: {response.text}")
         except Exception as e:
-            logger.error(f"Telegram notification error: {e}")
+            logger.error(f"❌ Telegram send error: {e}")
 
-    def send_discord(self, message):
-        payload = {
-            "content": message
-        }
+    def send_file(self, file_path, caption=""):
+        """Send a file (CSV) to Telegram."""
+        url = f"https://api.telegram.org/bot{self.bot_token}/sendDocument"
 
-        try:
-            response = requests.post(self.discord_webhook, json=payload, timeout=10)
-            if response.status_code == 204:
-                logger.success("Discord notification sent!")
-            else:
-                logger.error(f"Discord failed with status {response.status_code}: {response.text}")
-        except Exception as e:
-            logger.error(f"Discord notification error: {e}")
-
-    def format_changes(self, company_name, new_entries, updates):
-        message_lines = []
-        message_lines.append(f"🛡️ *Watchtower Update* for *{company_name}*\n")
-
-        # New subdomains
-        if new_entries:
-            message_lines.append(f"✅ *New Subdomains Found ({len(new_entries)})*:")
-            for entry in new_entries[:10]:
-                url = entry['data']['url']
-                status = entry['data']['status']
-                title = entry['data']['title']
-                tech = ', '.join(entry['data']['tech']) if entry['data']['tech'] else 'None'
-                message_lines.append(f"- `{url}` [{status}] [{title}] [{tech}]")
-
-            if len(new_entries) > 10:
-                message_lines.append(f"... and {len(new_entries) - 10} more.\n")
-
-        # Updated subdomains
-        if updates:
-            message_lines.append(f"\n🔄 *Updated Subdomains ({len(updates)})*:")
-            for update in updates[:5]:
-                url = update['url']
-                diff = update['diff']
-                message_lines.append(f"- `{url}`")
-                for field, change in diff.items():
-                    message_lines.append(f"    ➤ *{field}*: `{change['old']}` ➜ `{change['new']}`")
-
-            if len(updates) > 5:
-                message_lines.append(f"... and {len(updates) - 5} more.")
-
-        message_lines.append(f"\n📊 *Total New*: {len(new_entries)} | *Updated*: {len(updates)}")
-
-        return '\n'.join(message_lines)
-
-    def notify(self, company_name, changes):
-        new_entries = [c for c in changes if c['type'] == 'new']
-        updates = [c for c in changes if c['type'] == 'update']
-
-        if not new_entries and not updates:
-            logger.info("No changes to notify.")
+        if not os.path.exists(file_path):
+            logger.error(f"❌ File not found: {file_path}")
             return
 
-        message = self.format_changes(company_name, new_entries, updates)
+        with open(file_path, 'rb') as file:
+            files = {'document': file}
+            data = {
+                "chat_id": self.chat_id,
+                "caption": caption
+            }
+            try:
+                response = requests.post(url, data=data, files=files, timeout=30)
+                if response.status_code == 200:
+                    logger.success(f"✅ Telegram file '{file_path}' sent!")
+                else:
+                    logger.error(f"❌ Telegram file error {response.status_code}: {response.text}")
+            except Exception as e:
+                logger.error(f"❌ Telegram file send error: {e}")
 
-        self.send_telegram(message)
-        self.send_discord(message)
+class DiscordNotifier:
+    def __init__(self):
+        self.webhook_url = settings.DISCORD_WEBHOOK_URL
+
+    def send(self, message):
+        """Send text message to Discord."""
+        payload = {"content": message}
+        try:
+            response = requests.post(self.webhook_url, json=payload, timeout=10)
+            if response.status_code in [200, 204]:
+                logger.success("✅ Discord message sent!")
+            else:
+                logger.error(f"❌ Discord error {response.status_code}: {response.text}")
+        except Exception as e:
+            logger.error(f"❌ Discord send error: {e}")
+
+    def send_file(self, file_path, message=""):
+        """Send a file (CSV) to Discord."""
+        if not os.path.exists(file_path):
+            logger.error(f"❌ File not found: {file_path}")
+            return
+
+        with open(file_path, 'rb') as file:
+            files = {'file': file}
+            data = {'content': message}
+            try:
+                response = requests.post(self.webhook_url, data=data, files=files, timeout=30)
+                if response.status_code in [200, 204]:
+                    logger.success(f"✅ Discord file '{file_path}' sent!")
+                else:
+                    logger.error(f"❌ Discord file error {response.status_code}: {response.text}")
+            except Exception as e:
+                logger.error(f"❌ Discord file send error: {e}")
