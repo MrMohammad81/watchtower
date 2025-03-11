@@ -236,4 +236,4 @@ To enable Discord notifications:
 
 ## 👨‍💻 Author
 
-Made with ❤️ by **Your Name**
+Made with ❤️ by **MohammadHossein Mohit**
