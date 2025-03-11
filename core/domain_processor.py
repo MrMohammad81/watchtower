@@ -4,6 +4,9 @@ from core.notifier import TelegramNotifier, DiscordNotifier
 from utils import logger
 from config import settings
 
+MAX_DISPLAY_NEW = 10
+MAX_DISPLAY_UPDATE = 5
+
 class DomainProcessor:
     def __init__(self, domain, company_name):
         self.domain = domain
@@ -16,72 +19,77 @@ class DomainProcessor:
     def process(self, fetcher_results):
         logger.info(f"🔎 Processing domain: {self.domain}")
 
-        # Run the scanning chain and collect httpx results
+        # 1. Run scan chain -> get httpx results
         httpx_results = self.scanner.run_scan_chain(fetcher_results, self.domain)
-
-        # Count the number of httpx results
         count_results = len(httpx_results)
 
-        # Check if it's the first scan for this company/domain
+        # 2. Check if this is the first scan
         is_first_scan = self.mongo.httpx.count_documents({}) == 0
 
-        # Update MongoDB with new httpx results and detect changes
+        # 3. Update MongoDB and get changes
         changes = self.mongo.update_httpx(httpx_results)
 
-        # Handle first scan - only notify about the total number of found URLs
+        # 4. Handle first scan (no need to check changes)
         if is_first_scan:
-            msg = (
-                f"✅ First scan completed for `{self.domain}`\n\n"
-                f"🔎 Discovered `{count_results}` unique subdomains."
-            )
-
-            # Send notification
-            self.telegram_notifier.send(msg)
-            self.discord_notifier.send(msg)
-
+            self._notify_first_scan(count_results)
             logger.success(f"First scan for {self.domain} finished. Subdomains found: {count_results}")
+        else:
+            self._notify_changes(changes)
+
+        # 5. Close Mongo connection
+        self.mongo.close()
+
+    def _notify_first_scan(self, count_results):
+        msg = (
+            f"✅ *First Scan Completed* for `{self.domain}`\n\n"
+            f"🔍 Discovered `{count_results}` unique subdomains."
+        )
+        self._send_notifications(msg)
+
+    def _notify_changes(self, changes):
+        if not changes:
+            logger.info(f"No changes detected in {self.domain}")
             return
 
-        # Handle subsequent scans with detected changes
-        if changes:
-            # Compose notification message
-            msg_lines = [f"🔔 Scan Updates for: `{self.domain}`\n"]
+        new_items = [c for c in changes if c["type"] == "new"]
+        updated_items = [c for c in changes if c["type"] == "update"]
 
-            # New URLs block
-            new_items = [c for c in changes if c["type"] == "new"]
-            if new_items:
-                msg_lines.append("🆕 New URLs:")
-                for item in new_items:
-                    url = item["data"]["url"]
-                    status = item["data"]["status"]
-                    title = item["data"]["title"] or "-"
-                    msg_lines.append(f"- `{url}` [{status}] - \"{title}\"")
-                msg_lines.append("")  # Empty line for separation
+        msg_lines = [f"🔔 *Scan Updates* for `{self.domain}`\n"]
 
-            # Updated URLs block
-            updated_items = [c for c in changes if c["type"] == "update"]
-            if updated_items:
-                msg_lines.append("🔄 Updated URLs:")
-                for item in updated_items:
-                    url = item["url"]
-                    msg_lines.append(f"- `{url}`")
-                    for field, vals in item["diff"].items():
-                        old_val = vals["old"]
-                        new_val = vals["new"]
-                        msg_lines.append(f"  • {field.capitalize()}: `{old_val}` ➜ `{new_val}`")
-                msg_lines.append("")  # Empty line for separation
+        # 1. New URLs
+        if new_items:
+            msg_lines.append(f"🆕 *New Subdomains Found ({len(new_items)})*:")
+            for item in new_items[:MAX_DISPLAY_NEW]:
+                url = item["data"]["url"]
+                status = item["data"]["status"]
+                title = item["data"]["title"] or "-"
+                msg_lines.append(f"- `{url}` [{status}] \"{title}\"")
+            if len(new_items) > MAX_DISPLAY_NEW:
+                msg_lines.append(f"...and `{len(new_items) - MAX_DISPLAY_NEW}` more new items.")
+            msg_lines.append("")
 
-            # Combine all message lines
-            final_msg = "\n".join(msg_lines)
+        # 2. Updated URLs
+        if updated_items:
+            msg_lines.append(f"🔄 *Updated Subdomains ({len(updated_items)})*:")
+            for item in updated_items[:MAX_DISPLAY_UPDATE]:
+                url = item["url"]
+                msg_lines.append(f"- `{url}`")
+                for field, vals in item["diff"].items():
+                    old_val = vals["old"] or "-"
+                    new_val = vals["new"] or "-"
+                    msg_lines.append(f"   • *{field.capitalize()}*: `{old_val}` ➜ `{new_val}`")
+            if len(updated_items) > MAX_DISPLAY_UPDATE:
+                msg_lines.append(f"...and `{len(updated_items) - MAX_DISPLAY_UPDATE}` more updated items.")
+            msg_lines.append("")
 
-            # Send notification
-            self.telegram_notifier.send(final_msg)
-            self.discord_notifier.send(final_msg)
+        # 3. Final Stats
+        msg_lines.append(f"📊 *Total New*: `{len(new_items)}` | *Updated*: `{len(updated_items)}`")
 
-            logger.success(f"Changes detected and notified for {self.domain}")
+        final_msg = "\n".join(msg_lines)
+        self._send_notifications(final_msg)
 
-        else:
-            logger.info(f"No changes detected in {self.domain}")
+        logger.success(f"Changes detected and notified for {self.domain}")
 
-        # Close MongoDB connection after processing
-        self.mongo.close()
+    def _send_notifications(self, message):
+        self.telegram_notifier.send(message)
+        self.discord_notifier.send(message)
