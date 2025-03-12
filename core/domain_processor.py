@@ -10,6 +10,7 @@ from config import settings
 # Threshold for number of items to display in notification before attaching CSV
 MAX_DISPLAY_NEW = 10
 MAX_DISPLAY_UPDATE = 5
+MAX_DISPLAY_BRUTEFORCE = 5  # ➕ اضافه برای نوتیف اختصاصی BruteForce
 
 class DomainProcessor:
     def __init__(self, domain, company_name):
@@ -45,11 +46,23 @@ class DomainProcessor:
         self.mongo.close()
 
     def _notify_first_scan(self, count_results):
-        msg = (
-            f"✅ *First Scan Completed* for `{self.domain}`\n\n"
-            f"🔎 Discovered `{count_results}` unique subdomains."
-        )
-        self._send_notifications(msg)
+        # ➕ اضافه شد: بررسی رکوردهای BruteForce در اولین اسکن
+        bruteforce_items = self.mongo.get_bruteforce_only()
+        msg_lines = [
+            f"✅ *First Scan Completed* for `{self.domain}`\n",
+            f"🔎 Discovered `{count_results}` unique subdomains.\n"
+        ]
+
+        if bruteforce_items:
+            msg_lines.append(f"🛡️ *{len(bruteforce_items)} BruteForce Subdomains Found!*")
+            for item in bruteforce_items[:MAX_DISPLAY_BRUTEFORCE]:
+                msg_lines.append(f"- `{item['url']}` [{item.get('status', '-')}] \"{item.get('title', '-')}\", Tech: {item.get('tech', [])}")
+            if len(bruteforce_items) > MAX_DISPLAY_BRUTEFORCE:
+                msg_lines.append(f"...and `{len(bruteforce_items) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce items.")
+            msg_lines.append("")
+
+        final_msg = "\n".join(msg_lines)
+        self._send_notifications(final_msg)
 
     def _notify_changes(self, changes):
         if not changes:
@@ -58,6 +71,9 @@ class DomainProcessor:
 
         new_items = [c for c in changes if c["type"] == "new"]
         updated_items = [c for c in changes if c["type"] == "update"]
+
+        # ➕ اضافه شد: گرفتن رکوردهای BruteForce
+        bruteforce_items = self.mongo.get_bruteforce_only()
 
         msg_lines = [f"🔔 *Scan Updates* for `{self.domain}`\n"]
 
@@ -87,10 +103,18 @@ class DomainProcessor:
                 msg_lines.append(f"...and `{len(updated_items) - MAX_DISPLAY_UPDATE}` more updated items.")
             msg_lines.append("")
 
-        # Summary stats
-        msg_lines.append(f"📊 *Total New*: `{len(new_items)}` | *Updated*: `{len(updated_items)}`")
+        # ➕ اضافه شد: BruteForce Section
+        if bruteforce_items:
+            msg_lines.append(f"🛡️ *BruteForce Subdomains ({len(bruteforce_items)})*:")
+            for item in bruteforce_items[:MAX_DISPLAY_BRUTEFORCE]:
+                msg_lines.append(f"- `{item['url']}` [{item.get('status', '-')}] \"{item.get('title', '-')}\", Tech: {item.get('tech', [])}")
+            if len(bruteforce_items) > MAX_DISPLAY_BRUTEFORCE:
+                msg_lines.append(f"...and `{len(bruteforce_items) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce items.")
+            msg_lines.append("")
 
-        # Send the formatted message
+        # Summary stats
+        msg_lines.append(f"📊 *Total New*: `{len(new_items)}` | *Updated*: `{len(updated_items)}` | *BruteForce*: `{len(bruteforce_items)}`")
+
         final_msg = "\n".join(msg_lines)
         self._send_notifications(final_msg)
 
@@ -106,12 +130,11 @@ class DomainProcessor:
             logger.info(f"Temporary CSV file {csv_file} deleted.")
 
     def _create_csv(self, changes, domain):
-        # Temporary directory for CSV file
         tmp_dir = tempfile.gettempdir()
         file_path = os.path.join(tmp_dir, f"{domain}_changes.csv")
 
         with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['Type', 'URL', 'Status', 'Title', 'Tech', 'Changes']
+            fieldnames = ['Type', 'URL', 'Status', 'Title','BruteForce', 'Tech', 'Changes']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
 
@@ -121,6 +144,7 @@ class DomainProcessor:
                     'URL': change.get('data', {}).get('url') or change.get('url'),
                     'Status': change.get('data', {}).get('status', ''),
                     'Title': change.get('data', {}).get('title', ''),
+                    'BruteForce': change.get('data', {}).get('bruteforce', False),
                     'Tech': ', '.join(change.get('data', {}).get('tech', [])) if change.get('data') else '',
                     'Changes': str(change.get('diff', '')) if change.get('diff') else ''
                 }
@@ -130,6 +154,5 @@ class DomainProcessor:
         return file_path
 
     def _send_notifications(self, message):
-        """Send notifications to both Telegram and Discord."""
         self.telegram_notifier.send(message)
         self.discord_notifier.send(message)

@@ -15,7 +15,16 @@ class MongoManager:
         changes = []
         logger.info(f"Starting httpx results processing... Total lines: {len(httpx_data)}")
 
-        for line in httpx_data:
+        for item in httpx_data:
+            # اگر خروجی raw رشته باشه
+            if isinstance(item, str):
+                line = item
+                is_bruteforce = False
+            else:
+                # اگر دیکشنری باشه (از scanner برگشته با flag)
+                line = item.get("line", "")
+                is_bruteforce = item.get("bruteforce", False)
+
             logger.info(f"Processing line: {line}")
 
             brackets = re.findall(r'\[(.*?)\]', line)
@@ -31,22 +40,23 @@ class MongoManager:
             tech_raw = brackets[2] if len(brackets) >= 3 else ""
             tech = [t.strip() for t in tech_raw.split(",") if t.strip()] if tech_raw else []
 
+            # داکیومنت نهایی برای ذخیره در دیتابیس
             doc = {
                 "url": url,
                 "status": status,
                 "title": title,
                 "tech": tech,
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.utcnow(),
+                "bruteforce": is_bruteforce  # 🟢 اضافه شدن فلگ برای dnsbruteforce
             }
 
             existing = self.httpx.find_one({"url": url})
 
             if not existing:
-                # New record
                 doc["created_at"] = datetime.utcnow()
                 self.httpx.insert_one(doc)
                 changes.append({"type": "new", "data": doc})
-                logger.success(f"New entry inserted for URL: {url}")
+                logger.success(f"New entry inserted for URL: {url} | bruteforce: {is_bruteforce}")
 
             else:
                 diff = {}
@@ -54,7 +64,8 @@ class MongoManager:
                     if existing.get(field) != doc[field]:
                         diff[field] = {"old": existing.get(field), "new": doc[field]}
 
-                if diff:
+                if diff or existing.get("bruteforce") != is_bruteforce:
+                    doc["created_at"] = existing.get("created_at", datetime.utcnow())  # تاریخ اولیه را نگه دار
                     self.httpx.update_one({"url": url}, {"$set": doc})
                     changes.append({"type": "update", "url": url, "diff": diff})
                     logger.success(f"Updated entry for URL: {url} with changes: {diff}")
@@ -65,6 +76,14 @@ class MongoManager:
     def get_httpx_data(self, query=None):
         if query is None:
             query = {}
+
+        return list(self.httpx.find(query, {"_id": 0}))
+
+    def get_bruteforce_only(self):
+        """
+        Get only subdomains that were discovered by dnsbruteforce (puredns).
+        """
+        query = {"bruteforce": True}
         return list(self.httpx.find(query, {"_id": 0}))
 
     def close(self):
