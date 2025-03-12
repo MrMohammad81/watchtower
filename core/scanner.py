@@ -4,6 +4,8 @@ import os
 import re
 from utils import logger
 from core.subdomain_fetcher import SubdomainFetcher
+from config import settings
+
 
 class Scanner:
     def __init__(self, resolver_path):
@@ -68,29 +70,29 @@ class Scanner:
         logger.success(f"massdns found {len(results)} results")
         return results
 
-    def _run_dnsgen(self, subdomains):
-        logger.info("Running dnsgen...")
+    def _run_puredns_bruteforce(self, wordlist_path, domain):
+        logger.info(f"Running puredns bruteforce for {domain}...")
 
-        subdomains = self.clean_domains(subdomains)
+        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_out:
+            output_file = temp_out.name
 
-        if not subdomains:
-            logger.warning("No valid subdomains to run dnsgen on!")
-            return []
+            cmd = (
+                f"puredns bruteforce {wordlist_path} {domain} "
+                f"-q -r {self.resolver_path} -w {output_file}"
+            )
 
-        with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_in:
-            temp_in.write('\n'.join(subdomains))
-            temp_in.flush()
+            try:
+                subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+                with open(output_file, 'r') as f:
+                    results = [line.strip() for line in f.readlines()]
 
-        out_file = tempfile.NamedTemporaryFile(delete=False).name
-        cmd = f"cat {temp_in.name} | dnsgen -f - > {out_file}"
-        subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+                logger.success(f"puredns found {len(results)} subdomains (bruteforce).")
 
-        with open(out_file, 'r') as f:
-            results = [line.strip() for line in f]
+            except subprocess.CalledProcessError as e:
+                logger.error(f"puredns bruteforce failed: {e}")
+                results = []
 
-        os.remove(temp_in.name)
-        os.remove(out_file)
-        logger.success(f"dnsgen produced {len(results)} domains")
+            os.remove(output_file)
         return results
 
     def _run_dnsx(self, subdomains):
@@ -138,16 +140,15 @@ class Scanner:
     def run_scan_chain(self, fetcher_results, domain):
         logger.info(f"Starting scan chain for {domain}")
 
-        massdns_1 = self._run_massdns(fetcher_results)
-        massdns_1_filtered = self.fetcher.filter_in_scope(massdns_1, domain)
+        wordlist_path = settings.PUREDNS_WORDLIST_PATH  
+        puredns_results = self._run_puredns_bruteforce(wordlist_path, domain)
+        
+        combined_subdomains = list(set(fetcher_results + puredns_results))
+        logger.success(f"Combined subdomains count: {len(combined_subdomains)}")
 
-        dnsgen_out = self._run_dnsgen(massdns_1_filtered)
-        dnsgen_filtered = self.fetcher.filter_in_scope(dnsgen_out, domain)
+        massdns_filtered = self.fetcher.filter_in_scope(self._run_massdns(combined_subdomains), domain)
 
-        massdns_2 = self._run_massdns(dnsgen_filtered)
-        massdns_2_filtered = self.fetcher.filter_in_scope(massdns_2, domain)
-
-        dnsx_out = self._run_dnsx(massdns_2_filtered)
+        dnsx_out = self._run_dnsx(massdns_filtered)
         httpx_out = self._run_httpx(dnsx_out)
 
         logger.success(f"Completed scan chain for {domain}")
