@@ -140,7 +140,7 @@ class Scanner:
     def run_scan_chain(self, fetcher_results, domain):
         logger.info(f"Starting scan chain for {domain}")
 
-        wordlist_path = settings.PUREDNS_WORDLIST_PATH  
+        wordlist_path = settings.WORDLIST_PATH  
         puredns_results = self._run_puredns_bruteforce(wordlist_path, domain)
         
         combined_subdomains = list(set(fetcher_results + puredns_results))
