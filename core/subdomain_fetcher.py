@@ -1,6 +1,7 @@
 import subprocess
 import requests
-import json
+import os
+import tempfile
 import re
 from utils import logger
 from config import settings
@@ -13,6 +14,12 @@ class SubdomainFetcher:
         self.shodan_api_key = settings.SHODAN_API_KEY
         self.chaos_api_key = settings.CHAOS_API_KEY
         self.session = self.create_session_with_retries()
+        
+        if settings.GITHUB_TOKEN:
+            os.environ['GITHUB_TOKEN'] = settings.GITHUB_TOKEN
+            logger.info("[github-subdomains] GITHUB_TOKEN loaded from settings.py")
+        else:
+            logger.warning("[github-subdomains] GITHUB_TOKEN is not set in settings.py")
 
     def create_session_with_retries(self):
         session = requests.Session()
@@ -145,6 +152,35 @@ class SubdomainFetcher:
             logger.error(f"[Chaos] Error: {e}")
             return []
 
+    def from_githubSabdomians(self, domain):
+        logger.info(f"[github-subdomians Running for {domain}]")
+        try:
+            # chose path for output
+            with tempfile.NamedTemporaryFile(mode='w+',delete=False) as temp_out:
+                output = temp_out.name
+            
+            cmd = f"github-subdomains -d {domain} -q -o {output}"
+            subprocess.run(cmd, shell=True, executable="/bin/bash", check=True, timeout=60)
+            
+            # read output
+            with open(output, 'r') as f:
+                subdomains = [line.strip() for line in f if line.strip()]
+                
+            logger.success(f"[github-subdomains] Found {len(subdomains)} subdomians for {domain}")
+            
+            os.remove(output)
+        except subprocess.CalledProcessError as e:
+            logger.error(f"[github-subdomains] Command failed: {e}")
+            return []
+        
+        except subprocess.TimeoutExpired as e:
+            logger.error(f"[github-subdomains] Command timed out for {domain}")
+            return []
+        
+        except Exception as e:
+            logger.error(f"[github-subdomains] Error: {e}")
+            return []
+
     def from_wayback(self, domain):
         logger.info(f"[Wayback Machine] Fetching subdomains for {domain}")
         url = f"https://web.archive.org/cdx/search/cdx?url=*.{domain}&collaps=urlkey&fl=original"
@@ -173,6 +209,7 @@ class SubdomainFetcher:
 
         all_subdomains.update(self.from_crtsh(domain))
         all_subdomains.update(self.from_subfinder(domain))
+        all_subdomains.update(self.from_githubSabdomians(domain))
         all_subdomains.update(self.from_shodan(domain))
         all_subdomains.update(self.from_urlscan(domain))
         all_subdomains.update(self.from_rapiddns(domain))
