@@ -2,7 +2,6 @@ MONGO_URI = "mongodb://admin:password@localhost:27017/admin?authSource=admin"
 TELEGRAM_BOT_TOKEN = "your_bot_token"
 TELEGRAM_CHAT_ID = "your_chat_id"
 DISCORD_WEBHOOK_URL = "your_discord_webhook_url"
-RESOLVER_PATH = "config/resolver.txt"
 THREADS = 5
 SHODAN_API_KEY = "your_shodan_api_key"
 CHAOS_API_KEY = "your_chaos_api_key"
