@@ -152,31 +152,35 @@ class SubdomainFetcher:
             logger.error(f"[Chaos] Error: {e}")
             return []
 
-    def from_githubSabdomians(self, domain):
-        logger.info(f"[github-subdomians Running for {domain}]")
+    def from_github_subdomains(self, domain):
+        logger.info(f"[github-subdomains] Running for {domain}")
+
         try:
-            # chose path for output
-            with tempfile.NamedTemporaryFile(mode='w+',delete=False) as temp_out:
-                output = temp_out.name
-            
-            cmd = f"github-subdomains -d {domain} -q -o {output}"
+            # Patch for output file
+            with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_out:
+                output_file = temp_out.name
+
+            cmd = f"github-subdomains -d {domain} -q -o {output_file}"
             subprocess.run(cmd, shell=True, executable="/bin/bash", check=True, timeout=60)
-            
-            # read output
-            with open(output, 'r') as f:
+
+            # read output file
+            with open(output_file, 'r') as f:
                 subdomains = [line.strip() for line in f if line.strip()]
-                
-            logger.success(f"[github-subdomains] Found {len(subdomains)} subdomians for {domain}")
-            
-            os.remove(output)
+
+            logger.success(f"[github-subdomains] Found {len(subdomains)} subdomains for {domain}")
+
+            os.remove(output_file)
+
+            return subdomains
+
         except subprocess.CalledProcessError as e:
             logger.error(f"[github-subdomains] Command failed: {e}")
             return []
-        
-        except subprocess.TimeoutExpired as e:
+
+        except subprocess.TimeoutExpired:
             logger.error(f"[github-subdomains] Command timed out for {domain}")
             return []
-        
+
         except Exception as e:
             logger.error(f"[github-subdomains] Error: {e}")
             return []
@@ -209,7 +213,7 @@ class SubdomainFetcher:
 
         all_subdomains.update(self.from_crtsh(domain))
         all_subdomains.update(self.from_subfinder(domain))
-        all_subdomains.update(self.from_githubSabdomians(domain))
+        all_subdomains.update(self.from_github_subdomains(domain))
         all_subdomains.update(self.from_shodan(domain))
         all_subdomains.update(self.from_urlscan(domain))
         all_subdomains.update(self.from_rapiddns(domain))
