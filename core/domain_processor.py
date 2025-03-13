@@ -10,7 +10,8 @@ from config import settings
 # Threshold for number of items to display in notification before attaching CSV
 MAX_DISPLAY_NEW = 10
 MAX_DISPLAY_UPDATE = 5
-MAX_DISPLAY_BRUTEFORCE = 5  # ➕ اضافه برای نوتیف اختصاصی BruteForce
+MAX_DISPLAY_BRUTEFORCE = 5  # ➕ Added for BruteForce dedicated notification
+ALLOWED_STATUS_CODES = ['200', '403', '404']
 
 class DomainProcessor:
     def __init__(self, domain, company_name):
@@ -46,19 +47,21 @@ class DomainProcessor:
         self.mongo.close()
 
     def _notify_first_scan(self, count_results):
-        # ➕ اضافه شد: بررسی رکوردهای BruteForce در اولین اسکن
         bruteforce_items = self.mongo.get_bruteforce_only()
+
+        bruteforce_filtered = [item for item in bruteforce_items if item.get("status") in ALLOWED_STATUS_CODES]
+
         msg_lines = [
             f"✅ *First Scan Completed* for `{self.domain}`\n",
             f"🔎 Discovered `{count_results}` unique subdomains.\n"
         ]
 
-        if bruteforce_items:
-            msg_lines.append(f"🛡️ *{len(bruteforce_items)} BruteForce Subdomains Found!*")
-            for item in bruteforce_items[:MAX_DISPLAY_BRUTEFORCE]:
+        if bruteforce_filtered:
+            msg_lines.append(f"🛡️ *{len(bruteforce_filtered)} BruteForce Subdomains Found with status {', '.join(ALLOWED_STATUS_CODES)}*")
+            for item in bruteforce_filtered[:MAX_DISPLAY_BRUTEFORCE]:
                 msg_lines.append(f"- `{item['url']}` [{item.get('status', '-')}] \"{item.get('title', '-')}\", Tech: {item.get('tech', [])}")
-            if len(bruteforce_items) > MAX_DISPLAY_BRUTEFORCE:
-                msg_lines.append(f"...and `{len(bruteforce_items) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce items.")
+            if len(bruteforce_filtered) > MAX_DISPLAY_BRUTEFORCE:
+                msg_lines.append(f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce items.")
             msg_lines.append("")
 
         final_msg = "\n".join(msg_lines)
@@ -72,8 +75,9 @@ class DomainProcessor:
         new_items = [c for c in changes if c["type"] == "new"]
         updated_items = [c for c in changes if c["type"] == "update"]
 
-        # ➕ اضافه شد: گرفتن رکوردهای BruteForce
+        # Filter with status code
         bruteforce_items = self.mongo.get_bruteforce_only()
+        bruteforce_filtered = [item for item in bruteforce_items if item.get("status") in ALLOWED_STATUS_CODES]
 
         msg_lines = [f"🔔 *Scan Updates* for `{self.domain}`\n"]
 
@@ -103,26 +107,23 @@ class DomainProcessor:
                 msg_lines.append(f"...and `{len(updated_items) - MAX_DISPLAY_UPDATE}` more updated items.")
             msg_lines.append("")
 
-        # ➕ اضافه شد: BruteForce Section
-        if bruteforce_items:
-            msg_lines.append(f"🛡️ *BruteForce Subdomains ({len(bruteforce_items)})*:")
-            for item in bruteforce_items[:MAX_DISPLAY_BRUTEFORCE]:
+        # BruteForce Section
+        if bruteforce_filtered:
+            msg_lines.append(f"🛡️ *BruteForce Subdomains ({len(bruteforce_filtered)})* with status {', '.join(ALLOWED_STATUS_CODES)}:")
+            for item in bruteforce_filtered[:MAX_DISPLAY_BRUTEFORCE]:
                 msg_lines.append(f"- `{item['url']}` [{item.get('status', '-')}] \"{item.get('title', '-')}\", Tech: {item.get('tech', [])}")
-            if len(bruteforce_items) > MAX_DISPLAY_BRUTEFORCE:
-                msg_lines.append(f"...and `{len(bruteforce_items) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce items.")
+            if len(bruteforce_filtered) > MAX_DISPLAY_BRUTEFORCE:
+                msg_lines.append(f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce items.")
             msg_lines.append("")
 
-        # Summary stats
-        msg_lines.append(f"📊 *Total New*: `{len(new_items)}` | *Updated*: `{len(updated_items)}` | *BruteForce*: `{len(bruteforce_items)}`")
+        msg_lines.append(f"📊 *Total New*: `{len(new_items)}` | *Updated*: `{len(updated_items)}` | *BruteForce*: `{len(bruteforce_filtered)}`")
 
         final_msg = "\n".join(msg_lines)
         self._send_notifications(final_msg)
 
-        # If there are too many changes, send the full CSV
         if len(new_items) > MAX_DISPLAY_NEW or len(updated_items) > MAX_DISPLAY_UPDATE:
             csv_file = self._create_csv(changes, self.domain)
             caption = f"📂 Full Scan Results for `{self.domain}` attached (CSV)"
-
             self.telegram_notifier.send_file(csv_file, caption=caption)
             self.discord_notifier.send_file(csv_file, message=caption)
 
