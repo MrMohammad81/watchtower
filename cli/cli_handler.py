@@ -71,6 +71,7 @@ def main_cli():
     parser.add_argument("--show-httpx", metavar="COMPANY", help="Show httpx results for a company (optional filters)")
     parser.add_argument("--show-new", metavar="COMPANY", help="Show newly added subdomains for a company (optional filters)")
     parser.add_argument("--status", type=str, help="Filter by status code (e.g., 200)")
+    parser.add_argument("--dns-check", type=str, help="Filter to show only dns bruteforce subdomains (true/false)")
     parser.add_argument("--title", type=str, help="Filter by title keyword (e.g., admin)")
     parser.add_argument("--tech", type=str, help="Filter by technology (e.g., wordpress)")
     parser.add_argument("--url", type=str, help="Filter by URL keyword (e.g., login)")
@@ -174,5 +175,10 @@ def build_query_from_filters(args):
 
     if args.url:
         query["url"] = {"$regex": args.url, "$options": "i"}
+        
+    if args.dns_check and args.dns_check.lower() == "true":
+        query["bruteforce"] = True
+    elif args.dns_check and args.dns_check.lower() == "false":
+        query["bruteforce"] = False
 
     return query

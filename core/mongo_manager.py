@@ -16,12 +16,12 @@ class MongoManager:
         logger.info(f"Starting httpx results processing... Total lines: {len(httpx_data)}")
 
         for item in httpx_data:
-            # اگر خروجی raw رشته باشه
+            # If the raw output is a string
             if isinstance(item, str):
                 line = item
                 is_bruteforce = False
             else:
-                # اگر دیکشنری باشه (از scanner برگشته با flag)
+                # If it is a dictionary (returned from scanner with flag)
                 line = item.get("line", "")
                 is_bruteforce = item.get("bruteforce", False)
 
@@ -40,14 +40,14 @@ class MongoManager:
             tech_raw = brackets[2] if len(brackets) >= 3 else ""
             tech = [t.strip() for t in tech_raw.split(",") if t.strip()] if tech_raw else []
 
-            # داکیومنت نهایی برای ذخیره در دیتابیس
+            # Final document to be stored in the database
             doc = {
                 "url": url,
                 "status": status,
                 "title": title,
                 "tech": tech,
                 "updated_at": datetime.utcnow(),
-                "bruteforce": is_bruteforce  # 🟢 اضافه شدن فلگ برای dnsbruteforce
+                "bruteforce": is_bruteforce
             }
 
             existing = self.httpx.find_one({"url": url})
@@ -65,7 +65,7 @@ class MongoManager:
                         diff[field] = {"old": existing.get(field), "new": doc[field]}
 
                 if diff or existing.get("bruteforce") != is_bruteforce:
-                    doc["created_at"] = existing.get("created_at", datetime.utcnow())  # تاریخ اولیه را نگه دار
+                    doc["created_at"] = existing.get("created_at", datetime.utcnow())
                     self.httpx.update_one({"url": url}, {"$set": doc})
                     changes.append({"type": "update", "url": url, "diff": diff})
                     logger.success(f"Updated entry for URL: {url} with changes: {diff}")
