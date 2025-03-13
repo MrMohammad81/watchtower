@@ -7,11 +7,12 @@ from core.notifier import TelegramNotifier, DiscordNotifier
 from utils import logger
 from config import settings
 
-# Threshold for number of items to display in notification before attaching CSV
+# Thresholds
 MAX_DISPLAY_NEW = 10
 MAX_DISPLAY_UPDATE = 5
-MAX_DISPLAY_BRUTEFORCE = 5  # ➕ Added for BruteForce dedicated notification
+MAX_DISPLAY_BRUTEFORCE = 5
 ALLOWED_STATUS_CODES = ['200', '403', '404']
+
 
 class DomainProcessor:
     def __init__(self, domain, company_name):
@@ -38,7 +39,7 @@ class DomainProcessor:
         # 4. First scan behavior (summary only)
         if is_first_scan:
             self._notify_first_scan(count_results)
-            logger.success(f"First scan for {self.domain} completed. Subdomains found: {count_results}")
+            logger.success(f"✅ First scan for {self.domain} completed. Subdomains found: {count_results}")
         else:
             # 5. Handle changes (if any)
             self._notify_changes(changes)
@@ -47,9 +48,7 @@ class DomainProcessor:
         self.mongo.close()
 
     def _notify_first_scan(self, count_results):
-        bruteforce_items = self.mongo.get_bruteforce_only()
-
-        bruteforce_filtered = [item for item in bruteforce_items if item.get("status") in ALLOWED_STATUS_CODES]
+        bruteforce_filtered = self._get_filtered_bruteforce()
 
         msg_lines = [
             f"✅ *First Scan Completed* for `{self.domain}`\n",
@@ -57,15 +56,32 @@ class DomainProcessor:
         ]
 
         if bruteforce_filtered:
-            msg_lines.append(f"🛡️ *{len(bruteforce_filtered)} BruteForce Subdomains Found with status {', '.join(ALLOWED_STATUS_CODES)}*")
+            msg_lines.append(
+                f"🛡️ *{len(bruteforce_filtered)} BruteForce Subdomains Found with status {', '.join(ALLOWED_STATUS_CODES)}*"
+            )
             for item in bruteforce_filtered[:MAX_DISPLAY_BRUTEFORCE]:
-                msg_lines.append(f"- `{item['url']}` [{item.get('status', '-')}] \"{item.get('title', '-')}\", Tech: {item.get('tech', [])}")
+                msg_lines.append(
+                    f"- `{item['url']}` [{item.get('status', '-')}] \"{item.get('title', '-')}\", Tech: {item.get('tech', [])}"
+                )
+
             if len(bruteforce_filtered) > MAX_DISPLAY_BRUTEFORCE:
-                msg_lines.append(f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce items.")
-            msg_lines.append("")
+                msg_lines.append(
+                    f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce items."
+                )
 
         final_msg = "\n".join(msg_lines)
         self._send_notifications(final_msg)
+
+        # Send CSV if there are many records
+        if len(bruteforce_filtered) > MAX_DISPLAY_BRUTEFORCE or count_results > MAX_DISPLAY_NEW:
+            csv_file = self._create_csv_first_scan(bruteforce_filtered, self.domain)
+            caption = f"📂 Full BruteForce Results for `{self.domain}` attached (CSV)"
+
+            self.telegram_notifier.send_file(csv_file, caption=caption)
+            self.discord_notifier.send_file(csv_file, message=caption)
+
+            os.remove(csv_file)
+            logger.info(f"🗑️ Temporary CSV file {csv_file} deleted.")
 
     def _notify_changes(self, changes):
         if not changes:
@@ -74,10 +90,7 @@ class DomainProcessor:
 
         new_items = [c for c in changes if c["type"] == "new"]
         updated_items = [c for c in changes if c["type"] == "update"]
-
-        # Filter with status code
-        bruteforce_items = self.mongo.get_bruteforce_only()
-        bruteforce_filtered = [item for item in bruteforce_items if item.get("status") in ALLOWED_STATUS_CODES]
+        bruteforce_filtered = self._get_filtered_bruteforce()
 
         msg_lines = [f"🔔 *Scan Updates* for `{self.domain}`\n"]
 
@@ -109,18 +122,27 @@ class DomainProcessor:
 
         # BruteForce Section
         if bruteforce_filtered:
-            msg_lines.append(f"🛡️ *BruteForce Subdomains ({len(bruteforce_filtered)})* with status {', '.join(ALLOWED_STATUS_CODES)}:")
+            msg_lines.append(
+                f"🛡️ *BruteForce Subdomains ({len(bruteforce_filtered)})* with status {', '.join(ALLOWED_STATUS_CODES)}:"
+            )
             for item in bruteforce_filtered[:MAX_DISPLAY_BRUTEFORCE]:
-                msg_lines.append(f"- `{item['url']}` [{item.get('status', '-')}] \"{item.get('title', '-')}\", Tech: {item.get('tech', [])}")
+                msg_lines.append(
+                    f"- `{item['url']}` [{item.get('status', '-')}] \"{item.get('title', '-')}\", Tech: {item.get('tech', [])}"
+                )
             if len(bruteforce_filtered) > MAX_DISPLAY_BRUTEFORCE:
-                msg_lines.append(f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce items.")
+                msg_lines.append(
+                    f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce items."
+                )
             msg_lines.append("")
 
-        msg_lines.append(f"📊 *Total New*: `{len(new_items)}` | *Updated*: `{len(updated_items)}` | *BruteForce*: `{len(bruteforce_filtered)}`")
+        msg_lines.append(
+            f"📊 *Total New*: `{len(new_items)}` | *Updated*: `{len(updated_items)}` | *BruteForce*: `{len(bruteforce_filtered)}`"
+        )
 
         final_msg = "\n".join(msg_lines)
         self._send_notifications(final_msg)
 
+        # Send CSV if there are many records
         if len(new_items) > MAX_DISPLAY_NEW or len(updated_items) > MAX_DISPLAY_UPDATE:
             csv_file = self._create_csv(changes, self.domain)
             caption = f"📂 Full Scan Results for `{self.domain}` attached (CSV)"
@@ -128,14 +150,16 @@ class DomainProcessor:
             self.discord_notifier.send_file(csv_file, message=caption)
 
             os.remove(csv_file)
-            logger.info(f"Temporary CSV file {csv_file} deleted.")
+            logger.info(f"🗑️ Temporary CSV file {csv_file} deleted.")
+            
+
 
     def _create_csv(self, changes, domain):
         tmp_dir = tempfile.gettempdir()
         file_path = os.path.join(tmp_dir, f"{domain}_changes.csv")
 
         with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['Type', 'URL', 'Status', 'Title','BruteForce', 'Tech', 'Changes']
+            fieldnames = ['Type', 'URL', 'Status', 'Title', 'BruteForce', 'Tech', 'Changes']
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
 
@@ -151,9 +175,37 @@ class DomainProcessor:
                 }
                 writer.writerow(row)
 
-        logger.success(f"CSV file created: {file_path}")
+        logger.success(f"✅ CSV file created: {file_path}")
         return file_path
 
+
+    def _create_csv_first_scan(self, bruteforce_items, domain):
+        tmp_dir = tempfile.gettempdir()
+        file_path = os.path.join(tmp_dir, f"{domain}_bruteforce_first_scan.csv")
+
+        with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
+            fieldnames = ['URL', 'Status', 'Title', 'BruteForce', 'Tech']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+
+            for item in bruteforce_items:
+                row = {
+                    'URL': item.get('url'),
+                    'Status': item.get('status', ''),
+                    'Title': item.get('title', ''),
+                    'BruteForce': item.get('bruteforce', False),
+                    'Tech': ', '.join(item.get('tech', []))
+                }
+                writer.writerow(row)
+
+        logger.success(f"✅ CSV file (first scan) created: {file_path}")
+        return file_path
+
+    def _get_filtered_bruteforce(self):
+        bruteforce_items = self.mongo.get_bruteforce_only()
+        return [item for item in bruteforce_items if item.get("status") in ALLOWED_STATUS_CODES]
+    
+    
     def _send_notifications(self, message):
         self.telegram_notifier.send(message)
         self.discord_notifier.send(message)
