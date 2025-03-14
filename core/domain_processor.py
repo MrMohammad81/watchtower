@@ -13,7 +13,6 @@ MAX_DISPLAY_UPDATE = 5
 MAX_DISPLAY_BRUTEFORCE = 5
 ALLOWED_STATUS_CODES = ['200', '403', '404']
 
-
 class DomainProcessor:
     def __init__(self, domain, company_name):
         self.domain = domain
@@ -84,7 +83,9 @@ class DomainProcessor:
 
         new_items = [c for c in changes if c["type"] == "new"]
         updated_items = [c for c in changes if c["type"] == "update"]
-        bruteforce_filtered = self._get_filtered_bruteforce()
+
+        # فقط new هایی که با dns bruteforce اومدن
+        new_bruteforce_items = [c for c in new_items if c.get("data", {}).get("bruteforce", False)]
 
         msg_lines = [f"🔔 *Scan Updates* for `{self.domain}`"]
 
@@ -107,7 +108,7 @@ class DomainProcessor:
                 url = item["url"]
                 diff = item["diff"]
 
-                msg_lines.append(f"- {url}")
+                msg_lines.append(f"- [{url}]({url})")
                 for field in ["status", "title", "tech"]:
                     if field in diff:
                         old = diff[field]['old'] or '-'
@@ -117,19 +118,20 @@ class DomainProcessor:
             if len(updated_items) > MAX_DISPLAY_UPDATE:
                 msg_lines.append(f"...and `{len(updated_items) - MAX_DISPLAY_UPDATE}` more updated subdomains.")
 
-        # Bruteforce Subdomains
-        if bruteforce_filtered:
+        # فقط new bruteforce items رو نشون بده
+        if new_bruteforce_items:
             msg_lines.append("")
-            msg_lines.append(f"🛡️ *DNS Bruteforce Subdomains* ({len(bruteforce_filtered)}):")
-            for item in bruteforce_filtered[:MAX_DISPLAY_BRUTEFORCE]:
-                msg_lines.append(self._format_subdomain_entry(item))
+            msg_lines.append(f"🛡️ *New DNS Bruteforce Subdomains* ({len(new_bruteforce_items)}):")
+            for item in new_bruteforce_items[:MAX_DISPLAY_BRUTEFORCE]:
+                subdomain = item.get("data", {})
+                msg_lines.append(self._format_subdomain_entry(subdomain))
 
-            if len(bruteforce_filtered) > MAX_DISPLAY_BRUTEFORCE:
-                msg_lines.append(f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more found by bruteforce.")
+            if len(new_bruteforce_items) > MAX_DISPLAY_BRUTEFORCE:
+                msg_lines.append(f"...and `{len(new_bruteforce_items) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce subdomains.")
 
         # Summary
         msg_lines.append("")
-        msg_lines.append(f"📊 *Summary*: New: `{len(new_items)}` | Updated: `{len(updated_items)}` | BruteForce: `{len(bruteforce_filtered)}`")
+        msg_lines.append(f"📊 *Summary*: New: `{len(new_items)}` | Updated: `{len(updated_items)}` | New Bruteforce: `{len(new_bruteforce_items)}`")
 
         final_msg = "\n".join(msg_lines)
         self._send_notifications(final_msg)
