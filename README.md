@@ -1,22 +1,24 @@
 # 🛡️ Watchtower - Subdomain Recon & Monitoring Tool
 
-**Watchtower** is an automated subdomain reconnaissance tool designed to discover, scan, and monitor subdomains for changes.
-It notifies you via Telegram and Discord when new subdomains are discovered or existing ones are updated.
+**Watchtower** is an automated subdomain reconnaissance tool designed to discover, scan, and monitor subdomains for changes.  
+It notifies you via **Telegram** and **Discord** when new subdomains are discovered or existing ones are updated.
 
 ---
 
 ## 🚀 Features
 
-- Multi-source subdomain enumeration (crt.sh, RapidDNS, Chaos, Subfinder, WebArchive, etc.)
-- DNS resolution via `massdns` and permutations with `dnsgen`
+- Multi-source subdomain enumeration (crt.sh, RapidDNS, Chaos, Subfinder, WebArchive, Shodan, GitHub Subdomains, etc.)
+- DNS resolution via `massdns` and bruteforce DNS discovery with `PureDNS`
 - Live subdomain discovery using `dnsx` and `httpx`
 - Technology detection, status code checking, and title grabbing
 - MongoDB storage for subdomains and change tracking
-- **Telegram & Discord notifications** for updates and alerts
+- **BruteForce subdomain detection** flagging and notifications
+- Telegram & Discord notifications (message + CSV if too large)
 - Multi-threading for faster scans
 - YAML-based target management
-- Filter queries on stored subdomain results (status, title, tech, URL)
-- CSV export for large notifications
+- Advanced filters to query MongoDB results (status, title, tech, URL, bruteforce flag)
+- CSV export for large scan results and notifications
+- GitHub Subdomain discovery using `github-subdomains`
 
 ---
 
@@ -51,14 +53,16 @@ dnsgen
 
 ### External Tools (Installed on Your Server)
 
-| Tool         | Install Command                                      |
-|--------------|------------------------------------------------------|
-| **subfinder**    | `go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest` |
-| **chaos**        | `go install github.com/projectdiscovery/chaos-client/cmd/chaos@latest` |
-| **dnsx**         | `go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest` |
-| **httpx**        | `go install github.com/projectdiscovery/httpx/cmd/httpx@latest` |
-| **massdns**      | `git clone https://github.com/blechschmidt/massdns.git && cd massdns && make && cp bin/massdns /usr/local/bin` |
-| **shosubgo**     | `go install github.com/incogbyte/shosubgo@latest` |
+| Tool                  | Install Command                                                                                       |
+|-----------------------|-------------------------------------------------------------------------------------------------------|
+| **subfinder**         | `go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest`                           |
+| **chaos**             | `go install github.com/projectdiscovery/chaos-client/cmd/chaos@latest`                               |
+| **dnsx**              | `go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest`                                        |
+| **httpx**             | `go install github.com/projectdiscovery/httpx/cmd/httpx@latest`                                      |
+| **massdns**           | `git clone https://github.com/blechschmidt/massdns.git && cd massdns && make && cp bin/massdns /usr/local/bin` |
+| **shosubgo**          | `go install github.com/incogbyte/shosubgo@latest`                                                    |
+| **puredns**           | `go install github.com/d3mondev/puredns@latest`                                                      |
+| **github-subdomains** | `go install github.com/gwen001/github-subdomains@latest`                                             |
 
 ---
 
@@ -90,7 +94,7 @@ dnsgen
 
 ---
 
-## 🐳 Docker Support (Optional)
+## 🐋 Docker Support (Optional)
 
 ### Build Docker Image
 ```bash
@@ -135,6 +139,8 @@ RESOLVER_PATH = "config/resolver.txt"
 THREADS = 5
 SHODAN_API_KEY = "your_shodan_api_key"
 CHAOS_API_KEY = "your_chaos_api_key"
+GITHUB_TOKEN = "your_github_token"
+WORDLIST_PATH = "data/wordlist.txt"
 ```
 
 ---
@@ -187,6 +193,7 @@ Document example stored in MongoDB:
     "status": "200",
     "title": "Example Title",
     "tech": ["nginx", "php"],
+    "bruteforce": true,
     "created_at": "2024-03-12T09:00:00"
 }
 ```
@@ -215,6 +222,11 @@ watchtower --show-httpx company1
 watchtower --show-httpx company1 --status 200 --title admin
 ```
 
+#### Filter for DNS BruteForce Subdomains Only
+```bash
+watchtower --show-httpx company1 --dns-check true
+```
+
 ### Show Newly Added Subdomains (Last 24 Hours)
 ```bash
 watchtower --show-new company1
@@ -222,7 +234,7 @@ watchtower --show-new company1
 
 #### With Filters
 ```bash
-watchtower --show-new company1 --status 200 --title admin
+watchtower --show-new company1 --status 200 --dns-check true
 ```
 
 ### Update Project From GitHub
@@ -238,6 +250,7 @@ watchtower --update
 - First-time scan summaries
 - New subdomains discovered
 - Subdomain status/title/tech changes
+- DNS BruteForce discovered subdomains with specific status codes (200, 403, 404)
 - CSV file attachment when too many results
 
 ### Discord Notifications
