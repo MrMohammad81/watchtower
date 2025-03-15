@@ -3,4 +3,3 @@ pymongo
 PyYAML
 colorama
 tldextract
-dnsgen

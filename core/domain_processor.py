@@ -13,6 +13,10 @@ MAX_DISPLAY_UPDATE = 5
 MAX_DISPLAY_BRUTEFORCE = 5
 ALLOWED_STATUS_CODES = ['200', '403', '404']
 
+DISCORD_CHAR_LIMIT = 1900
+TELEGRAM_CHAR_LIMIT = 4000
+
+
 class DomainProcessor:
     def __init__(self, domain, company_name):
         self.domain = domain
@@ -25,24 +29,19 @@ class DomainProcessor:
     def process(self, fetcher_results):
         logger.info(f"🔎 Processing domain: {self.domain}")
 
-        # 1. Run scan chain and get httpx results
         httpx_results = self.scanner.run_scan_chain(fetcher_results, self.domain)
         count_results = len(httpx_results)
 
-        # 2. Check if it's the first scan for this domain/company
         is_first_scan = self.mongo.httpx.count_documents({}) == 0
 
-        # 3. Update MongoDB with the new httpx results and get detected changes
         changes = self.mongo.update_httpx(httpx_results)
 
-        # 4. Notifications based on first scan or updates
         if is_first_scan:
             self._notify_first_scan(count_results)
             logger.success(f"✅ First scan for {self.domain} completed. Subdomains found: {count_results}")
         else:
             self._notify_changes(changes)
 
-        # 5. Close MongoDB connection
         self.mongo.close()
 
     def _notify_first_scan(self, count_results):
@@ -63,18 +62,8 @@ class DomainProcessor:
                 msg_lines.append(f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more found by bruteforce.")
 
         final_msg = "\n".join(msg_lines)
-        self._send_notifications(final_msg)
-
-        # Send CSV if necessary
-        if len(bruteforce_filtered) > MAX_DISPLAY_BRUTEFORCE or count_results > MAX_DISPLAY_NEW:
-            csv_file = self._create_csv_first_scan(bruteforce_filtered, self.domain)
-            caption = f"📂 Full BruteForce Results for `{self.domain}` attached (CSV)"
-
-            self.telegram_notifier.send_file(csv_file, caption=caption)
-            self.discord_notifier.send_file(csv_file, message=caption)
-
-            os.remove(csv_file)
-            logger.info(f"🗑️ Temporary CSV file {csv_file} deleted.")
+        logger.info("✅ First scan notification composed.")
+        self._send_notifications(final_msg, bruteforce_filtered, is_first_scan=True)
 
     def _notify_changes(self, changes):
         if not changes:
@@ -83,13 +72,10 @@ class DomainProcessor:
 
         new_items = [c for c in changes if c["type"] == "new"]
         updated_items = [c for c in changes if c["type"] == "update"]
-
-        # فقط new هایی که با dns bruteforce اومدن
         new_bruteforce_items = [c for c in new_items if c.get("data", {}).get("bruteforce", False)]
 
         msg_lines = [f"🔔 *Scan Updates* for `{self.domain}`"]
 
-        # New Subdomains
         if new_items:
             msg_lines.append("")
             msg_lines.append(f"🆕 *New Subdomains* ({len(new_items)}):")
@@ -100,15 +86,14 @@ class DomainProcessor:
             if len(new_items) > MAX_DISPLAY_NEW:
                 msg_lines.append(f"...and `{len(new_items) - MAX_DISPLAY_NEW}` more new subdomains.")
 
-        # Updated Subdomains
         if updated_items:
             msg_lines.append("")
             msg_lines.append(f"🔄 *Updated Subdomains* ({len(updated_items)}):")
             for item in updated_items[:MAX_DISPLAY_UPDATE]:
                 url = item["url"]
                 diff = item["diff"]
-
                 msg_lines.append(f"- [{url}]({url})")
+
                 for field in ["status", "title", "tech"]:
                     if field in diff:
                         old = diff[field]['old'] or '-'
@@ -118,7 +103,6 @@ class DomainProcessor:
             if len(updated_items) > MAX_DISPLAY_UPDATE:
                 msg_lines.append(f"...and `{len(updated_items) - MAX_DISPLAY_UPDATE}` more updated subdomains.")
 
-        # فقط new bruteforce items رو نشون بده
         if new_bruteforce_items:
             msg_lines.append("")
             msg_lines.append(f"🛡️ *New DNS Bruteforce Subdomains* ({len(new_bruteforce_items)}):")
@@ -129,23 +113,41 @@ class DomainProcessor:
             if len(new_bruteforce_items) > MAX_DISPLAY_BRUTEFORCE:
                 msg_lines.append(f"...and `{len(new_bruteforce_items) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce subdomains.")
 
-        # Summary
         msg_lines.append("")
         msg_lines.append(f"📊 *Summary*: New: `{len(new_items)}` | Updated: `{len(updated_items)}` | New Bruteforce: `{len(new_bruteforce_items)}`")
 
         final_msg = "\n".join(msg_lines)
-        self._send_notifications(final_msg)
+        logger.info("✅ Change notification composed.")
+        self._send_notifications(final_msg, changes)
 
-        # Send CSV if necessary
-        if len(new_items) > MAX_DISPLAY_NEW or len(updated_items) > MAX_DISPLAY_UPDATE:
-            csv_file = self._create_csv(changes, self.domain)
-            caption = f"📂 Full Scan Results for `{self.domain}` attached (CSV)"
+    def _send_notifications(self, message, data, is_first_scan=False):
+        """
+        Send notifications to both Telegram and Discord.
+        If message is too long, send CSV instead.
+        """
+        message_length = len(message)
 
-            self.telegram_notifier.send_file(csv_file, caption=caption)
-            self.discord_notifier.send_file(csv_file, message=caption)
+        # If message fits in both, send as text
+        if message_length <= DISCORD_CHAR_LIMIT and message_length <= TELEGRAM_CHAR_LIMIT:
+            self.telegram_notifier.send(message)
+            self.discord_notifier.send(message)
+            return
 
-            os.remove(csv_file)
-            logger.info(f"🗑️ Temporary CSV file {csv_file} deleted.")
+        logger.warning("⚠️ Message too long, sending CSV instead...")
+
+        if is_first_scan:
+            csv_file = self._create_csv_first_scan(data, self.domain)
+            caption = f"📂 Full BruteForce Results for `{self.domain}` (CSV attached)"
+        else:
+            csv_file = self._create_csv(data, self.domain)
+            caption = f"📂 Full Scan Results for `{self.domain}` (CSV attached)"
+
+        # Send CSV to both
+        self.telegram_notifier.send_file(csv_file, caption=caption)
+        self.discord_notifier.send_file(csv_file, message=caption)
+
+        os.remove(csv_file)
+        logger.info(f"🗑️ Temporary CSV file {csv_file} deleted after notification.")
 
     def _format_subdomain_entry(self, item):
         url = item.get('url')
@@ -168,8 +170,8 @@ class DomainProcessor:
 
             for change in changes:
                 row = {
-                    'Type': change['type'],
-                    'URL': change.get('data', {}).get('url') or change.get('url'),
+                    'Type': change.get('type', ''),
+                    'URL': change.get('data', {}).get('url') or change.get('url', ''),
                     'Status': change.get('data', {}).get('status', ''),
                     'Title': change.get('data', {}).get('title', ''),
                     'BruteForce': change.get('data', {}).get('bruteforce', False),
@@ -206,7 +208,3 @@ class DomainProcessor:
     def _get_filtered_bruteforce(self):
         bruteforce_items = self.mongo.get_bruteforce_only()
         return [item for item in bruteforce_items if item.get("status") in ALLOWED_STATUS_CODES]
-
-    def _send_notifications(self, message):
-        self.telegram_notifier.send(message)
-        self.discord_notifier.send(message)
