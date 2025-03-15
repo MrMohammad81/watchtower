@@ -16,7 +16,7 @@ def parse_targets_file(yaml_file):
             data = yaml.safe_load(file)
             return data.get('targets', [])
     except Exception as e:
-        logger.error(f"Failed to load targets file: {e}")
+        logger.error(f"❌ Failed to load targets file: {e}")
         return []
 
 def run_update():
@@ -70,6 +70,7 @@ def main_cli():
     # Filters for querying httpx data
     parser.add_argument("--show-httpx", metavar="COMPANY", help="Show httpx results for a company (optional filters)")
     parser.add_argument("--show-new", metavar="COMPANY", help="Show newly added subdomains for a company (optional filters)")
+    parser.add_argument("--show-updates", metavar="COMPANY", help="Show updated subdomains and their changes for a company")
     parser.add_argument("--status", type=str, help="Filter by status code (e.g., 200)")
     parser.add_argument("--dns-check", type=str, help="Filter to show only dns bruteforce subdomains (true/false)")
     parser.add_argument("--title", type=str, help="Filter by title keyword (e.g., admin)")
@@ -90,51 +91,17 @@ def main_cli():
 
     # Handle --show-httpx with optional filters
     if args.show_httpx:
-        company_name = args.show_httpx
-        processor = DomainProcessor("", company_name)
-
-        query = build_query_from_filters(args)
-        logger.info(f"📄 Running query for company `{company_name}` with filters: {query}")
-
-        results = processor.mongo.get_httpx_data(query=query)
-
-        if not results:
-            logger.warning(f"⚠️ No results found for `{company_name}` with the given filters.")
-        else:
-            logger.success(f"✅ {len(results)} results found for `{company_name}`")
-            for res in results:
-                logger.info(f"{res['url']} [{res['status']}] {res['title']} {res['tech']}")
-
-        processor.mongo.close()
+        handle_show_httpx(args)
         sys.exit(0)
 
     # Handle --show-new with optional filters
     if args.show_new:
-        company_name = args.show_new
-        processor = DomainProcessor("", company_name)
+        handle_show_new(args)
+        sys.exit(0)
 
-        logger.info(f"🆕 Fetching newly added subdomains for `{company_name}`...")
-
-        # Filter for recently added entries (e.g., last 24 hours)
-        yesterday = datetime.utcnow() - timedelta(days=1)
-        query = {"created_at": {"$gte": yesterday}}
-
-        # Merge additional filters
-        extra_filters = build_query_from_filters(args)
-        query.update(extra_filters)
-
-        logger.info(f"📄 Running query for new entries with filters: {query}")
-
-        new_results = processor.mongo.get_httpx_data(query=query)
-
-        if not new_results:
-            logger.warning("⚠️ No new subdomains found matching your filters.")
-        else:
-            logger.success(f"✅ Found {len(new_results)} new subdomains for `{company_name}`:")
-            for res in new_results:
-                logger.info(f"{res['url']} [{res['status']}] {res['title']} {res['tech']}")
-
-        processor.mongo.close()
+    # Handle --show-updates with optional filters
+    if args.show_updates:
+        handle_show_updates(args)
         sys.exit(0)
 
     # Handle single domain scan
@@ -157,11 +124,77 @@ def main_cli():
         sys.exit(0)
 
     # If no valid option was provided
-    parser.error("❌ You must provide --targets-file or -u or --show-httpx or --show-new")
+    parser.error("❌ You must provide --targets-file or -u or --show-httpx or --show-new or --show-updates")
     sys.exit(1)
 
+def handle_show_httpx(args):
+    company_name = args.show_httpx
+    processor = DomainProcessor("", company_name)
+
+    query = build_query_from_filters(args)
+    logger.info(f"📄 Running query for company `{company_name}` with filters: {query}")
+
+    results = processor.mongo.get_httpx_data(query=query)
+
+    if not results:
+        logger.warning(f"⚠️ No results found for `{company_name}` with the given filters.")
+    else:
+        logger.success(f"✅ {len(results)} results found for `{company_name}`")
+        for res in results:
+            logger.info(f"{res['url']} [{res['status']}] {res['title']} {res['tech']}")
+
+    processor.mongo.close()
+
+def handle_show_new(args):
+    company_name = args.show_new
+    processor = DomainProcessor("", company_name)
+
+    logger.info(f"🆕 Fetching newly added subdomains for `{company_name}`...")
+
+    yesterday = datetime.utcnow() - timedelta(days=1)
+    query = {"created_at": {"$gte": yesterday}}
+
+    extra_filters = build_query_from_filters(args)
+    query.update(extra_filters)
+
+    logger.info(f"📄 Running query for new entries with filters: {query}")
+
+    new_results = processor.mongo.get_httpx_data(query=query)
+
+    if not new_results:
+        logger.warning("⚠️ No new subdomains found matching your filters.")
+    else:
+        logger.success(f"✅ Found {len(new_results)} new subdomains for `{company_name}`:")
+        for res in new_results:
+            logger.info(f"{res['url']} [{res['status']}] {res['title']} {res['tech']}")
+
+    processor.mongo.close()
+
+def handle_show_updates(args):
+    company_name = args.show_updates
+    processor = DomainProcessor("", company_name)
+
+    logger.info(f"🔄 Fetching updated subdomains for `{company_name}`...")
+
+    updates = processor.mongo.get_update_logs()
+
+    if not updates:
+        logger.warning(f"⚠️ No updated subdomains found for `{company_name}`.")
+    else:
+        logger.success(f"✅ Found {len(updates)} updated subdomains for `{company_name}`:")
+        for upd in updates:
+            url = upd.get("url", "N/A")
+            diff = upd.get("diff", {})
+            logger.info(f"- [{url}]({url})")
+            for field, change in diff.items():
+                old_val = change.get("old", "-")
+                new_val = change.get("new", "-")
+                logger.info(f"  • {field.capitalize()}: {old_val} ➜ {new_val}")
+            logger.info("")
+
+    processor.mongo.close()
+
 def build_query_from_filters(args):
-    """Build MongoDB query filters from CLI arguments."""
     query = {}
 
     if args.status:
@@ -175,7 +208,7 @@ def build_query_from_filters(args):
 
     if args.url:
         query["url"] = {"$regex": args.url, "$options": "i"}
-        
+
     if args.dns_check and args.dns_check.lower() == "true":
         query["bruteforce"] = True
     elif args.dns_check and args.dns_check.lower() == "false":
