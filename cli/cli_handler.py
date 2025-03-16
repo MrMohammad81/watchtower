@@ -23,38 +23,31 @@ def run_update():
     logger.info("🔄 Checking for updates from GitHub...")
     try:
         result = subprocess.run(["git", "pull"], cwd="/usr/local/watchtower", capture_output=True, text=True)
-
         if result.returncode == 0:
             logger.success("✅ Project updated successfully!")
             print(result.stdout)
         else:
             logger.error("❌ Failed to update project:")
             print(result.stderr)
-
     except Exception as e:
         logger.error(f"⚠️ Error during update: {e}")
 
 def process_domain(domain, company_name):
     fetcher = SubdomainFetcher()
     fetcher_results = fetcher.run_all(domain)
-
     if not fetcher_results:
         logger.warning(f"⚠️ No subdomains found for {domain}")
         return
-
     processor = DomainProcessor(domain, company_name)
     processor.process(fetcher_results)
 
 def process_company_targets(company):
     company_name = company['name']
     domains = company.get('domains', [])
-
     if not domains:
         logger.warning(f"⚠️ No domains found for company: {company_name}")
         return
-
     logger.info(f"🚀 Processing company: {company_name}")
-
     with ThreadPoolExecutor(max_workers=settings.THREADS) as executor:
         executor.map(lambda domain: process_domain(domain, company_name), domains)
 
@@ -67,44 +60,45 @@ def main_cli():
     parser.add_argument("--threads", type=int, help="Number of threads (override default)")
     parser.add_argument("--update", action="store_true", help="Update Watchtower from GitHub")
 
-    # Filters for querying httpx data
-    parser.add_argument("--show-httpx", metavar="COMPANY", help="Show httpx results for a company (optional filters)")
-    parser.add_argument("--show-new", metavar="COMPANY", help="Show newly added subdomains for a company (optional filters)")
-    parser.add_argument("--show-updates", metavar="COMPANY", help="Show updated subdomains and their changes for a company")
+    # Filters & Queries
+    parser.add_argument("--show-httpx", metavar="COMPANY", help="Show httpx results for a company")
+    parser.add_argument("--show-new", metavar="COMPANY", help="Show newly added subdomains for a company")
+    parser.add_argument("--show-updates", metavar="COMPANY", help="Show updated subdomains and their changes")
+    parser.add_argument("--domain-filter", metavar="DOMAIN", help="Domain to filter results in multi-domain companies")
+    
+    # Filters on result display
     parser.add_argument("--status", type=str, help="Filter by status code (e.g., 200)")
-    parser.add_argument("--dns-check", type=str, help="Filter to show only dns bruteforce subdomains (true/false)")
+    parser.add_argument("--dns-check", type=str, help="Filter by DNS bruteforce subdomains (true/false)")
     parser.add_argument("--title", type=str, help="Filter by title keyword (e.g., admin)")
     parser.add_argument("--tech", type=str, help="Filter by technology (e.g., wordpress)")
     parser.add_argument("--url", type=str, help="Filter by URL keyword (e.g., login)")
 
     args = parser.parse_args()
 
-    # Dynamic thread override
+    # Threads
     if args.threads:
         settings.THREADS = args.threads
         logger.info(f"🧵 Threads set to {settings.THREADS} from CLI argument")
 
-    # Handle --update
+    # Git Update
     if args.update:
         run_update()
         sys.exit(0)
 
-    # Handle --show-httpx with optional filters
+    # Queries
     if args.show_httpx:
         handle_show_httpx(args)
         sys.exit(0)
 
-    # Handle --show-new with optional filters
     if args.show_new:
         handle_show_new(args)
         sys.exit(0)
 
-    # Handle --show-updates with optional filters
     if args.show_updates:
         handle_show_updates(args)
         sys.exit(0)
 
-    # Handle single domain scan
+    # Scan a single domain
     if args.domain:
         extracted = tldextract.extract(args.domain)
         company_name = extracted.domain
@@ -113,26 +107,25 @@ def main_cli():
         logger.success("✅ Single scan completed!")
         sys.exit(0)
 
-    # Handle batch scan with targets file
+    # YAML Batch scan
     if args.targets_file:
         companies = parse_targets_file(args.targets_file)
-
         with ThreadPoolExecutor(max_workers=settings.THREADS) as executor:
             executor.map(process_company_targets, companies)
-
         logger.success("✅ Batch scan completed!")
         sys.exit(0)
 
-    # If no valid option was provided
+    # If nothing matches
     parser.error("❌ You must provide --targets-file or -u or --show-httpx or --show-new or --show-updates")
     sys.exit(1)
 
 def handle_show_httpx(args):
     company_name = args.show_httpx
-    processor = DomainProcessor("", company_name)
+    domain_filter = args.domain_filter
+    processor = DomainProcessor(domain_filter or "", company_name)
 
     query = build_query_from_filters(args)
-    logger.info(f"📄 Running query for company `{company_name}` with filters: {query}")
+    logger.info(f"📄 Running httpx query for company `{company_name}` with filters: {query}")
 
     results = processor.mongo.get_httpx_data(query=query)
 
@@ -147,17 +140,17 @@ def handle_show_httpx(args):
 
 def handle_show_new(args):
     company_name = args.show_new
-    processor = DomainProcessor("", company_name)
+    domain_filter = args.domain_filter
+    processor = DomainProcessor(domain_filter or "", company_name)
 
-    logger.info(f"🆕 Fetching newly added subdomains for `{company_name}`...")
-
+    logger.info(f"🆕 Fetching new subdomains for `{company_name}`...")
     yesterday = datetime.utcnow() - timedelta(days=1)
     query = {"created_at": {"$gte": yesterday}}
 
     extra_filters = build_query_from_filters(args)
     query.update(extra_filters)
 
-    logger.info(f"📄 Running query for new entries with filters: {query}")
+    logger.info(f"📄 Querying new entries with filters: {query}")
 
     new_results = processor.mongo.get_httpx_data(query=query)
 
@@ -172,16 +165,17 @@ def handle_show_new(args):
 
 def handle_show_updates(args):
     company_name = args.show_updates
-    processor = DomainProcessor("", company_name)
+    domain_filter = args.domain_filter
+    processor = DomainProcessor(domain_filter or "", company_name)
 
-    logger.info(f"🔄 Fetching updated subdomains for `{company_name}`...")
+    logger.info(f"🔄 Fetching updates for `{company_name}`...")
 
     updates = processor.mongo.get_update_logs()
 
     if not updates:
         logger.warning(f"⚠️ No updated subdomains found for `{company_name}`.")
     else:
-        logger.success(f"✅ Found {len(updates)} updated subdomains for `{company_name}`:")
+        logger.success(f"✅ Found {len(updates)} updates for `{company_name}`:")
         for upd in updates:
             url = upd.get("url", "N/A")
             diff = upd.get("diff", {})

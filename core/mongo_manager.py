@@ -4,11 +4,18 @@ from utils import logger
 from datetime import datetime
 
 class MongoManager:
-    def __init__(self, mongo_uri, company_name):
+    def __init__(self, mongo_uri, company_name, domain_name=None):
         self.mongo_uri = mongo_uri
         self.company_name = company_name.replace('.', '_').replace('-', '_')
+        self.domain_name = domain_name.replace('.', '_').replace('-', '_') if domain_name else None
+
         self.client = pymongo.MongoClient(mongo_uri)
-        self.db = self.client[f"{self.company_name}_db"]
+
+        if self.domain_name:
+            self.db = self.client[f"{self.company_name}_db_{self.domain_name}"]
+        else:
+            self.db = self.client[f"{self.company_name}_db"]
+
         self.httpx = self.db["httpx_results"]
         self.updates = self.db["update_logs"]
 
@@ -17,12 +24,10 @@ class MongoManager:
         logger.info(f"🔧 Starting httpx results processing... Total lines: {len(httpx_data)}")
 
         for item in httpx_data:
-            
             if isinstance(item, str):
                 line = item
                 is_bruteforce = False
             else:
-               
                 line = item.get("line", "")
                 is_bruteforce = item.get("bruteforce", False)
 
@@ -53,21 +58,16 @@ class MongoManager:
             existing = self.httpx.find_one({"url": url})
 
             if not existing:
-                
                 doc["created_at"] = datetime.utcnow()
                 self.httpx.insert_one(doc)
-
                 changes.append({"type": "new", "data": doc})
                 logger.success(f"🆕 New entry inserted for URL: {url} | bruteforce: {is_bruteforce}")
-
             else:
                 diff = {}
-                
                 for field in ["status", "title", "tech"]:
                     if existing.get(field) != doc[field]:
                         diff[field] = {"old": existing.get(field), "new": doc[field]}
 
-                
                 if existing.get("bruteforce") != is_bruteforce:
                     diff["bruteforce"] = {"old": existing.get("bruteforce", False), "new": is_bruteforce}
 
@@ -76,17 +76,12 @@ class MongoManager:
                     continue
 
                 doc["created_at"] = existing.get("created_at", datetime.utcnow())
-               
-                # Update record
                 self.httpx.update_one({"url": url}, {"$set": doc})
-
-                # Save in log diff
                 self.updates.insert_one({
                     "url": url,
                     "diff": diff,
                     "updated_at": datetime.utcnow()
                 })
-
                 changes.append({"type": "update", "url": url, "diff": diff})
                 logger.success(f"🔄 Updated entry for URL: {url} with changes: {diff}")
 
@@ -96,7 +91,6 @@ class MongoManager:
     def get_httpx_data(self, query=None):
         if query is None:
             query = {}
-
         return list(self.httpx.find(query, {"_id": 0}))
 
     def get_update_logs(self):

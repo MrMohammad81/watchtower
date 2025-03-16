@@ -21,7 +21,7 @@ class DomainProcessor:
     def __init__(self, domain, company_name):
         self.domain = domain
         self.company_name = company_name
-        self.mongo = MongoManager(settings.MONGO_URI, company_name)
+        self.mongo = MongoManager(settings.MONGO_URI, company_name, domain)
         self.scanner = Scanner(settings.RESOLVER_PATH)
         self.telegram_notifier = TelegramNotifier()
         self.discord_notifier = DiscordNotifier()
@@ -72,6 +72,7 @@ class DomainProcessor:
 
         new_items = [c for c in changes if c["type"] == "new"]
         updated_items = [c for c in changes if c["type"] == "update"]
+
         new_bruteforce_items = [c for c in new_items if c.get("data", {}).get("bruteforce", False)]
 
         msg_lines = [f"🔔 *Scan Updates* for `{self.domain}`"]
@@ -121,13 +122,8 @@ class DomainProcessor:
         self._send_notifications(final_msg, changes)
 
     def _send_notifications(self, message, data, is_first_scan=False):
-        """
-        Send notifications to both Telegram and Discord.
-        If message is too long, send CSV instead.
-        """
         message_length = len(message)
 
-        # If message fits in both, send as text
         if message_length <= DISCORD_CHAR_LIMIT and message_length <= TELEGRAM_CHAR_LIMIT:
             self.telegram_notifier.send(message)
             self.discord_notifier.send(message)
@@ -142,7 +138,6 @@ class DomainProcessor:
             csv_file = self._create_csv(data, self.domain)
             caption = f"📂 Full Scan Results for `{self.domain}` (CSV attached)"
 
-        # Send CSV to both
         self.telegram_notifier.send_file(csv_file, caption=caption)
         self.discord_notifier.send_file(csv_file, message=caption)
 
