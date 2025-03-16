@@ -155,7 +155,10 @@ class DomainProcessor:
             caption = f"📂 Full Scan Results for `{self.domain}` (CSV attached)"
 
         # Send CSV to both platforms
+        self.telegram_notifier.send(message)
         self.telegram_notifier.send_file(csv_file, caption=caption)
+        
+        self.discord_notifier.send(message)
         self.discord_notifier.send_file(csv_file, message=caption)
 
         os.remove(csv_file)
