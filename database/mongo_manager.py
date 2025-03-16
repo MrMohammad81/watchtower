@@ -2,6 +2,7 @@ import pymongo
 import re
 from utils import logger
 from datetime import datetime
+from config import settings
 
 class MongoManager:
     def __init__(self, mongo_uri, program_name, domain_name=None):
@@ -111,7 +112,7 @@ class MongoManager:
         logger.debug(f"🔎 Fetching HTTPX data with query: {query}")
         return list(self.httpx.find(query, {"_id": 0}))
 
-    
+
     def get_update_logs(self):
         if not self.updates:
             logger.error("❌ No domain selected. Cannot fetch update logs.")
@@ -120,6 +121,10 @@ class MongoManager:
         logger.debug("🔎 Fetching update logs")
         return list(self.updates.find({}, {"_id": 0}))
 
+
+    def get_client():
+        return pymongo.MongoClient(settings.MONGO_URI)
+  
   
     def get_bruteforce_only(self):
         if not self.httpx:

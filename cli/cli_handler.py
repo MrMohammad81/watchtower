@@ -1,15 +1,16 @@
 import argparse
 import yaml
 import tldextract
+import subprocess
+import sys
+from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor
+
 from core.domain_processor import DomainProcessor
 from core.subdomain_fetcher import SubdomainFetcher
 from database.mongo_manager import MongoManager
 from utils import logger
 from config import settings
-from concurrent.futures import ThreadPoolExecutor
-import subprocess
-import sys
-from datetime import datetime, timedelta
 
 
 def parse_targets_file(yaml_file):
@@ -25,7 +26,12 @@ def parse_targets_file(yaml_file):
 def run_update():
     logger.info("🔄 Checking for updates from GitHub...")
     try:
-        result = subprocess.run(["git", "pull"], cwd="/usr/local/watchtower", capture_output=True, text=True)
+        result = subprocess.run(
+            ["git", "pull"],
+            cwd="/usr/local/watchtower",
+            capture_output=True,
+            text=True
+        )
         if result.returncode == 0:
             logger.success("✅ Project updated successfully!")
             print(result.stdout)
@@ -74,7 +80,7 @@ def main_cli():
     # Query commands
     parser.add_argument("--programs", action="store_true", help="List all programs")
     parser.add_argument("--domains", metavar="PROGRAM", help="List all domains for a program")
-    parser.add_argument("--drop", metavar="PROGRAM", help="Delete a program or domain inside program (use --domain-name)")
+    parser.add_argument("--drop", metavar="PROGRAM", help="Delete a program, or domain inside a program (use --domain-name)")
     
     parser.add_argument("--show-httpx", metavar="PROGRAM", help="Show httpx results for a program (optional filters)")
     parser.add_argument("--show-new", metavar="PROGRAM", help="Show newly added subdomains for a program (optional filters)")
@@ -90,17 +96,19 @@ def main_cli():
 
     args = parser.parse_args()
 
-    # Dynamic thread override
+    # Threads
     if args.threads:
         settings.THREADS = args.threads
         logger.info(f"🧵 Threads set to {settings.THREADS} from CLI argument")
 
+    # Update
     if args.update:
         run_update()
         sys.exit(0)
 
+    # Program listings and actions
     if args.programs:
-        handle_programs()
+        MongoManager.list_programs()
         sys.exit(0)
 
     if args.domains:
@@ -111,24 +119,29 @@ def main_cli():
         handle_drop(args.drop, args.domain_name)
         sys.exit(0)
 
+    # Show httpx results with filters
     if args.show_httpx:
         handle_show_httpx(args)
         sys.exit(0)
 
+    # Show new subdomains
     if args.show_new:
         handle_show_new(args)
         sys.exit(0)
 
+    # Show updated subdomains
     if args.show_updates:
         handle_show_updates(args)
         sys.exit(0)
 
+    # Single domain scan
     if args.domain:
         extracted = tldextract.extract(args.domain)
         program_name = extracted.domain
         process_domain(args.domain, program_name)
         sys.exit(0)
 
+    # Batch scan from targets file
     if args.targets_file:
         programs = parse_targets_file(args.targets_file)
         with ThreadPoolExecutor(max_workers=settings.THREADS) as executor:
@@ -139,23 +152,11 @@ def main_cli():
     sys.exit(1)
 
 
-# ------------- HANDLER FUNCTIONS ------------------- #
-
-def handle_programs():
-    mongo = MongoManager(settings.MONGO_URI, program_name="dummy")  # فقط برای اتصال
-    programs = mongo.list_programs()
-    mongo.close()
-
-    if not programs:
-        logger.warning("⚠️ No programs found in MongoDB.")
-    else:
-        logger.success(f"✅ Found {len(programs)} programs:")
-        for p in programs:
-            logger.info(f"- {p}")
-
+# ----------------- HANDLER FUNCTIONS ----------------- #
 
 def handle_domains(program_name):
-    mongo = MongoManager(settings.MONGO_URI, program_name)
+    mongo = MongoManager(settings.MONGO_URI, program_name=program_name)
+
     domains = mongo.list_domains()
     mongo.close()
 
@@ -184,7 +185,7 @@ def handle_show_httpx(args):
     mongo = MongoManager(settings.MONGO_URI, program_name, domain_name)
 
     query = build_query_from_filters(args)
-    logger.info(f"📄 Running query for program `{program_name}`, domain `{domain_name or 'ALL'}` with filters: {query}")
+    logger.info(f"📄 Querying program `{program_name}`, domain `{domain_name or 'ALL'}` with filters: {query}")
 
     results = mongo.get_httpx_data(query=query)
 
@@ -207,7 +208,7 @@ def handle_show_new(args):
     query = {"created_at": {"$gte": yesterday}}
     query.update(build_query_from_filters(args))
 
-    logger.info(f"📄 Running query for NEW entries for `{program_name}`, domain `{domain_name or 'ALL'}`...")
+    logger.info(f"📄 Querying NEW entries for `{program_name}`, domain `{domain_name or 'ALL'}`...")
     results = mongo.get_httpx_data(query=query)
 
     if not results:
