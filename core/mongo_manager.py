@@ -9,11 +9,10 @@ class MongoManager:
         self.program_name = program_name.replace('.', '_').replace('-', '_')
         self.domain_name = domain_name.replace('.', '_').replace('-', '_')
 
-        # اتصال به دیتابیس بر اساس نام برنامه
+        # Connect with program name
         self.client = pymongo.MongoClient(mongo_uri)
         self.db = self.client[f"{self.program_name}_db"]
 
-        # هر دامنه یک کالکشن جدا داره
         self.httpx = self.db[f"{self.domain_name}_httpx_results"]
         self.updates = self.db[f"{self.domain_name}_update_logs"]
 

@@ -132,7 +132,7 @@ class DomainProcessor:
 
         self._send_notifications(final_msg, changes)
 
-    def _send_notifications(self, message, data, is_first_scan=False):
+    def _send_notifications(self, message, data, is_first_scan=True):
         """
         Send notifications to both Telegram and Discord.
         If message is too long, send CSV instead.
