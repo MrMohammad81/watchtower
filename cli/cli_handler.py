@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import subprocess
 import sys
 from datetime import datetime, timedelta
-from infrastructure.mongo_manager import MongoManager
+from database.mongo_manager import MongoManager
 
 def parse_targets_file(yaml_file):
     try:
