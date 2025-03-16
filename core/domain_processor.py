@@ -13,9 +13,9 @@ MAX_DISPLAY_UPDATE = 5
 MAX_DISPLAY_BRUTEFORCE = 5
 ALLOWED_STATUS_CODES = ['200', '403', '404']
 
-# Platform message limits
-DISCORD_CHAR_LIMIT = 1000
-TELEGRAM_CHAR_LIMIT = 1000
+# Platform message limits (not restricting anymore for CSV)
+DISCORD_CHAR_LIMIT = 1900
+TELEGRAM_CHAR_LIMIT = 4000
 
 class DomainProcessor:
     def __init__(self, domain, program_name):
@@ -33,23 +33,21 @@ class DomainProcessor:
         httpx_results = self.scanner.run_scan_chain(fetcher_results, self.domain)
         count_results = len(httpx_results)
 
-        # First scan check
+        # Check if this is the first scan
         is_first_scan = self.mongo.httpx.count_documents({}) == 0
 
-        # Update Mongo with changes
+        # Update MongoDB and get changes
         changes = self.mongo.update_httpx(httpx_results)
 
-        # Notify based on first scan or updates
         if is_first_scan:
-            self._notify_first_scan(count_results)
+            self._notify_first_scan(count_results, httpx_results)
             logger.success(f"✅ First scan for {self.domain} completed. Subdomains found: {count_results}")
         else:
             self._notify_changes(changes)
 
-        # Close DB connection
         self.mongo.close()
 
-    def _notify_first_scan(self, count_results):
+    def _notify_first_scan(self, count_results, httpx_results):
         bruteforce_filtered = self._get_filtered_bruteforce()
 
         msg_lines = [
@@ -69,8 +67,8 @@ class DomainProcessor:
         final_msg = "\n".join(msg_lines)
         logger.info("✅ First scan notification composed.")
 
-        # Send notification or CSV based on message size or data size
-        self._send_notifications(final_msg, bruteforce_filtered, is_first_scan=True)
+        # Send notification + CSV always
+        self._send_notifications(final_msg, httpx_results, is_first_scan=True)
 
     def _notify_changes(self, changes):
         if not changes:
@@ -83,7 +81,6 @@ class DomainProcessor:
 
         msg_lines = [f"🔔 *Scan Updates* for `{self.domain}`"]
 
-        # New Subdomains
         if new_items:
             msg_lines.append("")
             msg_lines.append(f"🆕 *New Subdomains* ({len(new_items)}):")
@@ -94,7 +91,6 @@ class DomainProcessor:
             if len(new_items) > MAX_DISPLAY_NEW:
                 msg_lines.append(f"...and `{len(new_items) - MAX_DISPLAY_NEW}` more new subdomains.")
 
-        # Updated Subdomains
         if updated_items:
             msg_lines.append("")
             msg_lines.append(f"🔄 *Updated Subdomains* ({len(updated_items)}):")
@@ -105,14 +101,13 @@ class DomainProcessor:
 
                 for field in ["status", "title", "tech", "bruteforce"]:
                     if field in diff:
-                        old = diff[field]['old'] if diff[field]['old'] is not None else '-'
-                        new = diff[field]['new'] if diff[field]['new'] is not None else '-'
+                        old = diff[field].get('old', '-')
+                        new = diff[field].get('new', '-')
                         msg_lines.append(f"   • *{field.capitalize()}*: `{old}` ➜ `{new}`")
 
             if len(updated_items) > MAX_DISPLAY_UPDATE:
                 msg_lines.append(f"...and `{len(updated_items) - MAX_DISPLAY_UPDATE}` more updated subdomains.")
 
-        # New DNS Bruteforce Subdomains
         if new_bruteforce_items:
             msg_lines.append("")
             msg_lines.append(f"🛡️ *New DNS Bruteforce Subdomains* ({len(new_bruteforce_items)}):")
@@ -123,30 +118,26 @@ class DomainProcessor:
             if len(new_bruteforce_items) > MAX_DISPLAY_BRUTEFORCE:
                 msg_lines.append(f"...and `{len(new_bruteforce_items) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce subdomains.")
 
-        # Summary
         msg_lines.append("")
         msg_lines.append(f"📊 *Summary*: New: `{len(new_items)}` | Updated: `{len(updated_items)}` | New Bruteforce: `{len(new_bruteforce_items)}`")
 
         final_msg = "\n".join(msg_lines)
         logger.info("✅ Change notification composed.")
 
+        # Send notification + CSV always
         self._send_notifications(final_msg, changes)
 
-    def _send_notifications(self, message, data, is_first_scan=True):
+    def _send_notifications(self, message, data, is_first_scan=False):
         """
-        Send notifications to both Telegram and Discord.
-        If message is too long, send CSV instead.
+        Always send text message + CSV to Telegram and Discord.
         """
-        message_length = len(message)
+        logger.info("📤 Sending notifications...")
 
-        if message_length <= DISCORD_CHAR_LIMIT and message_length <= TELEGRAM_CHAR_LIMIT:
-            self.telegram_notifier.send(message)
-            self.discord_notifier.send(message)
-            logger.info("✅ Notifications sent successfully (Text Mode).")
-            return
+        # Send message text
+        self.telegram_notifier.send(message)
+        self.discord_notifier.send(message)
 
-        logger.warning("⚠️ Message too long, sending CSV instead...")
-
+        # Prepare CSV file
         if is_first_scan:
             csv_file = self._create_csv_first_scan(data, self.domain)
             caption = f"📂 Full BruteForce Results for `{self.domain}` (CSV attached)"
@@ -154,13 +145,11 @@ class DomainProcessor:
             csv_file = self._create_csv(data, self.domain)
             caption = f"📂 Full Scan Results for `{self.domain}` (CSV attached)"
 
-        # Send CSV to both platforms
-        self.telegram_notifier.send(message)
+        # Send CSV files
         self.telegram_notifier.send_file(csv_file, caption=caption)
-        
-        self.discord_notifier.send(message)
         self.discord_notifier.send_file(csv_file, message=caption)
 
+        # Clean up
         os.remove(csv_file)
         logger.info(f"🗑️ Temporary CSV file {csv_file} deleted after sending.")
 
@@ -171,7 +160,6 @@ class DomainProcessor:
         tech_list = item.get('tech', [])
         tech_display = ', '.join(tech_list) if tech_list else '-'
 
-        # Return formatted string
         return f"- [{url}]({url})\n  status: {status}\n  title: {title}\n  tech: {tech_display}"
 
     def _create_csv(self, changes, domain):
@@ -221,8 +209,5 @@ class DomainProcessor:
         return file_path
 
     def _get_filtered_bruteforce(self):
-        """
-        Get only bruteforce subdomains with allowed status codes.
-        """
         bruteforce_items = self.mongo.get_bruteforce_only()
         return [item for item in bruteforce_items if item.get("status") in ALLOWED_STATUS_CODES]

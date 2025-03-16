@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 import subprocess
 import sys
 from datetime import datetime, timedelta
+from infrastructure.mongo_manager import MongoManager
 
 def parse_targets_file(yaml_file):
     try:
@@ -70,8 +71,12 @@ def main_cli():
     parser.add_argument("--show-new", metavar="PROGRAM", help="Show newly added subdomains for a program (optional filters)")
     parser.add_argument("--show-updates", metavar="PROGRAM", help="Show updated subdomains and their changes for a program")
 
+    # Extra management commands
+    parser.add_argument("--programs", action="store_true", help="List all programs")
+    parser.add_argument("--drop", metavar="PROGRAM", help="Drop a program from database")
+
     # Filters
-    parser.add_argument("--domain-name", metavar="DOMAIN", help="Filter results for a specific domain (inside program)")
+    parser.add_argument("--domain-name", metavar="DOMAIN", help="Filter results for a specific domain inside a program")
     parser.add_argument("--status", type=str, help="Filter by status code")
     parser.add_argument("--dns-check", type=str, help="Filter DNS bruteforce subdomains (true/false)")
     parser.add_argument("--title", type=str, help="Filter by title keyword")
@@ -85,6 +90,14 @@ def main_cli():
 
     if args.update:
         run_update()
+        sys.exit(0)
+
+    if args.programs:
+        list_programs()
+        sys.exit(0)
+
+    if args.drop:
+        drop_program(args.drop)
         sys.exit(0)
 
     if args.show_httpx:
@@ -114,15 +127,38 @@ def main_cli():
     parser.error("❌ You must provide --targets-file or -u or --show-* options")
     sys.exit(1)
 
+def list_programs():
+    client = MongoManager.get_client()
+    db_list = client.list_database_names()
+
+    logger.info("📚 Available Programs:")
+    for db in db_list:
+        if db.endswith("_db"):
+            program_name = db.replace("_db", "")
+            logger.info(f" - {program_name}")
+
+    client.close()
+
+def drop_program(program_name):
+    client = MongoManager.get_client()
+    db_name = f"{program_name}_db"
+
+    if db_name in client.list_database_names():
+        client.drop_database(db_name)
+        logger.success(f"🗑️ Program `{program_name}` dropped successfully.")
+    else:
+        logger.warning(f"❌ Program `{program_name}` not found.")
+
+    client.close()
+
 def handle_show_httpx(args):
     program_name = args.show_httpx
-    domain_filter = args.domain_name
-    processor = DomainProcessor("", program_name if domain_filter is None else f"{program_name}_{domain_filter}")
+    processor = DomainProcessor("", program_name)
 
     query = build_query_from_filters(args)
-    logger.info(f"📄 Query for program `{program_name}` domain `{domain_filter or 'ALL'}`: {query}")
+    logger.info(f"📄 Query for program `{program_name}` with filters: {query}")
 
-    results = processor.mongo.get_httpx_data(query=query)
+    results = processor.mongo.get_httpx_data(query=query, domain=args.domain_name)
 
     if not results:
         logger.warning("⚠️ No results found.")
@@ -134,15 +170,15 @@ def handle_show_httpx(args):
 
 def handle_show_new(args):
     program_name = args.show_new
-    domain_filter = args.domain_name
-    processor = DomainProcessor("", program_name if domain_filter is None else f"{program_name}_{domain_filter}")
+    processor = DomainProcessor("", program_name)
 
     yesterday = datetime.utcnow() - timedelta(days=1)
     query = {"created_at": {"$gte": yesterday}}
     query.update(build_query_from_filters(args))
 
     logger.info(f"📄 Query for new entries: {query}")
-    results = processor.mongo.get_httpx_data(query=query)
+
+    results = processor.mongo.get_httpx_data(query=query, domain=args.domain_name)
 
     if not results:
         logger.warning("⚠️ No new subdomains found.")
@@ -154,10 +190,9 @@ def handle_show_new(args):
 
 def handle_show_updates(args):
     program_name = args.show_updates
-    domain_filter = args.domain_name
-    processor = DomainProcessor("", program_name if domain_filter is None else f"{program_name}_{domain_filter}")
+    processor = DomainProcessor("", program_name)
 
-    updates = processor.mongo.get_update_logs()
+    updates = processor.mongo.get_update_logs(domain=args.domain_name)
 
     if not updates:
         logger.warning("⚠️ No updated subdomains found.")
@@ -184,7 +219,6 @@ def build_query_from_filters(args):
         query["tech"] = {"$elemMatch": {"$regex": args.tech, "$options": "i"}}
     if args.url:
         query["url"] = {"$regex": args.url, "$options": "i"}
-
     if args.dns_check:
         query["bruteforce"] = args.dns_check.lower() == "true"
 
