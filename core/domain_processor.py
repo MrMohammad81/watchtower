@@ -14,8 +14,8 @@ MAX_DISPLAY_BRUTEFORCE = 5
 ALLOWED_STATUS_CODES = ['200', '403', '404']
 
 # Platform message limits
-DISCORD_CHAR_LIMIT = 1900
-TELEGRAM_CHAR_LIMIT = 4000
+DISCORD_CHAR_LIMIT = 500
+TELEGRAM_CHAR_LIMIT = 500
 
 class DomainProcessor:
     def __init__(self, domain, program_name):
