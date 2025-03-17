@@ -37,3 +37,14 @@ class Helpers:
            f"  title: {title}\n"
            f"  tech: {tech_display}"
         )
+        
+    def auto_subdomain_filter(self, item):
+       
+        logger.error(f"Auto filtering item: {item}")
+
+        if 'line' in item:
+            return self.subdomain_filter(item)
+        elif 'url' in item:
+            return self.bruteforce_filter(item)
+        else:
+            return "- Unknown item format -"
