@@ -12,10 +12,11 @@ MAX_DISPLAY_BRUTEFORCE = 5
 ALLOWED_STATUS_CODES = ['200', '403', '404']
 
 class NotificationManager:
-    def __init__(self , domain, program_name):
+    def __init__(self, domain, program_name, mongo, notification_sender):
         self.domain = domain
-        self.mongo = MongoManager(settings.MONGO_URI, program_name, domain)
-        self.notification_sender = NotificationSender()
+        self.program_name = program_name
+        self.mongo = mongo
+        self.notification_sender = notification_sender
         
     def notify_first_scan(self, count_results, httpx_results):
         bruteforce_filtered = self._get_filtered_bruteforce()
