@@ -1,9 +1,11 @@
+from utils import logger
 
 class Helpers:
     def __init__(self):
         pass
     
     def subdomain_filter(self, item):
+        logger.info(f"Filtering item: {item}")
         url = item.get('url', '-')
         status = item.get('status', '-')
         title = item.get('title', '-') or '-'
