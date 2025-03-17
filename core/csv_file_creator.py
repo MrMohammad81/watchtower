@@ -34,9 +34,7 @@ class CsvFileCreator:
     
     def create_csv_first_scan(self, httpx_results, domain):
         tmp_dir = tempfile.gettempdir()
-        file_path = os.path.join(tmp_dir, f"{domain}_bruteforce_first_scan.csv")
-
-        logger.error(f"Bruteforce items for CSV: {httpx_results}")
+        file_path = os.path.join(tmp_dir, f"{domain}_first_scan.csv")
 
         with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
             fieldnames = ['URL', 'Status', 'Title', 'BruteForce', 'Tech']

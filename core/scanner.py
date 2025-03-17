@@ -83,7 +83,7 @@ class Scanner:
 
             cmd = (
                 f"puredns bruteforce {wordlist_path} {domain} "
-                f"-q -r {self.resolver_path} -w {output_file} --threads 200"
+                f"-q -r {self.resolver_path} -w {output_file}"
             )
 
             try:
