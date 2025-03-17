@@ -6,8 +6,7 @@ class Helpers:
     
     
     def subdomain_filter(self, item):
-        logger.info(f"Filtering item: {item}")
-
+        
         line = item.get('line', '')
         parts = line.split(' [')
     
