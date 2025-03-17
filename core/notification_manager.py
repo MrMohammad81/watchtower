@@ -39,7 +39,7 @@ class NotificationManager:
             msg_lines.append("")
             msg_lines.append(f"🛡️ *DNS Bruteforce Subdomains* ({len(bruteforce_filtered)}):")
             for item in bruteforce_filtered[:MAX_DISPLAY_BRUTEFORCE]:
-                msg_lines.append(helper.subdomain_filter(item))
+                msg_lines.append(helper.bruteforce_filter(item))
 
             if len(bruteforce_filtered) > MAX_DISPLAY_BRUTEFORCE:
                 msg_lines.append(f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more found by bruteforce.")

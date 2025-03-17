@@ -22,3 +22,18 @@ class Helpers:
            f"  tech: {tech_display}"
         )
 
+
+    def bruteforce_filter(self, item):
+        
+        url = item.get('url', '-')
+        status = item.get('status', '-')
+        title = item.get('title', '-') or '-'
+        tech_list = item.get('tech', [])
+        tech_display = ', '.join(tech_list) if tech_list else '-'
+
+        return (
+            f"- [{url}]({url})\n"
+           f"  status: {status}\n"
+           f"  title: {title}\n"
+           f"  tech: {tech_display}"
+        )
