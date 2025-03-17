@@ -2,6 +2,7 @@ import os
 import tempfile
 import csv
 from utils import logger
+from helpers.helpers import Helpers
 
 class CsvFileCreator:
     def __init__(self, domain):
@@ -31,7 +32,7 @@ class CsvFileCreator:
         logger.success(f"✅ CSV file created: {file_path}")
         return file_path
     
-    def create_csv_first_scan(self, bruteforce_items, domain):
+    def create_csv_first_scan(self, httpx_results, domain):
         tmp_dir = tempfile.gettempdir()
         file_path = os.path.join(tmp_dir, f"{domain}_bruteforce_first_scan.csv")
 
@@ -40,14 +41,10 @@ class CsvFileCreator:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             writer.writeheader()
 
-            for item in bruteforce_items:
-                logger.error(f"Bruteforce items for CSV: {bruteforce_items}")
+            for item in httpx_results:
+                logger.error(f"Bruteforce items for CSV: {httpx_results}")
                 row = {
-                    'URL': item.get('url', ''),
-                    'Status': item.get('status', ''),
-                    'Title': item.get('title', ''),
-                    'BruteForce': item.get('bruteforce', False),
-                    'Tech': ', '.join(item.get('tech', [])) if item.get('tech') else ''
+                    Helpers.auto_subdomain_filter(item)
                 }
                 writer.writerow(row)
 
