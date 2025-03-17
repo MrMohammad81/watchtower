@@ -45,6 +45,3 @@ class DomainProcessor:
 
         self.mongo.close()
 
-    def _get_filtered_bruteforce(self):
-        bruteforce_items = self.mongo.get_bruteforce_only()
-        return [item for item in bruteforce_items if item.get("status") in ALLOWED_STATUS_CODES]
