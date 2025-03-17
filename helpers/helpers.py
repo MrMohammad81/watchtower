@@ -3,7 +3,6 @@ class Helpers:
     def __init__(self):
         pass
     
-    @staticmethod
     def subdomain_filter(self, item):
         url = item.get('url', '-')
         status = item.get('status', '-')
