@@ -1,6 +1,6 @@
 from helpers.helpers import Helpers
 from utils import logger
-
+from database.mongo_manager import MongoManager
 
 # Thresholds
 MAX_DISPLAY_NEW = 15
@@ -9,10 +9,10 @@ MAX_DISPLAY_BRUTEFORCE = 10
 ALLOWED_STATUS_CODES = ['200', '403', '404']
 
 class NotificationManager:
-    def __init__(self, domain, program_name, mongo, notification_sender):
+    def __init__(self, domain, program_name, notification_sender):
         self.domain = domain
         self.program_name = program_name
-        self.mongo = mongo
+        self.mongo = MongoManager()
         self.notification_sender = notification_sender
         
     def notify_first_scan(self, count_results, httpx_results):
@@ -33,7 +33,7 @@ class NotificationManager:
                 msg_lines.append(f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more found by bruteforce.")
 
         final_msg = "\n".join(msg_lines)
-        logger.info("✅ First scan notification composed.{final_msg}")
+        logger.info("✅ First scan notification composed.")
 
         # Send notification + CSV always
         self.notification_sender.send_notifications(final_msg, httpx_results, is_first_scan=True)
