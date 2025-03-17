@@ -35,7 +35,7 @@ class NotificationManager:
 
 
         if bruteforce_filtered:
-            logger.info(f"[*] Bruteforce Filtered Items: {bruteforce_filtered}")
+            logger.error(f"[*] Bruteforce Filtered Items: {bruteforce_filtered}")
             msg_lines.append("")
             msg_lines.append(f"🛡️ *DNS Bruteforce Subdomains* ({len(bruteforce_filtered)}):")
             for item in bruteforce_filtered[:MAX_DISPLAY_BRUTEFORCE]:
