@@ -2,7 +2,6 @@ import os
 import tempfile
 import csv
 from utils import logger
-from helpers.helpers import Helpers
 
 class CsvFileCreator:
     def __init__(self, domain):
@@ -36,16 +35,21 @@ class CsvFileCreator:
         tmp_dir = tempfile.gettempdir()
         file_path = os.path.join(tmp_dir, f"{domain}_bruteforce_first_scan.csv")
 
-        with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['URL', 'Status', 'Title', 'BruteForce', 'Tech']
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
+        logger.error(f"Bruteforce items for CSV: {httpx_results}")  # Log to ensure data structure
 
-            for item in httpx_results:
-                logger.error(f"Bruteforce items for CSV: {httpx_results}")
-                row = {
-                    Helpers.auto_subdomain_filter(item)
-                }
+        with open(file_path, mode='w', newline='', encoding='utf-8') as csvfile:
+                fieldnames = ['URL', 'Status', 'Title', 'BruteForce', 'Tech']
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+
+                for item in httpx_results:
+                    row = {
+                        'URL': item.get('url', ''),
+                        'Status': item.get('status', ''),
+                        'Title': item.get('title', ''),
+                        'BruteForce': item.get('bruteforce', False),
+                        'Tech': ', '.join(item.get('tech', [])) if item.get('tech') else ''
+                    }
                 writer.writerow(row)
 
         logger.success(f"✅ CSV file (first scan) created: {file_path}")
