@@ -41,6 +41,7 @@ class CsvFileCreator:
             writer.writeheader()
 
             for item in bruteforce_items:
+                logger.error(f"Bruteforce items for CSV: {bruteforce_items}")
                 row = {
                     'URL': item.get('url', ''),
                     'Status': item.get('status', ''),

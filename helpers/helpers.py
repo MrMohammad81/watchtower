@@ -40,8 +40,6 @@ class Helpers:
         
     def auto_subdomain_filter(self, item):
        
-        logger.error(f"Auto filtering item: {item}")
-
         if 'line' in item:
             return self.subdomain_filter(item)
         elif 'url' in item:
