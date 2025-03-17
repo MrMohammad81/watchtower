@@ -1,6 +1,7 @@
 import os
 import tempfile
 import csv
+import re
 from utils import logger
 
 class CsvFileCreator:
@@ -43,14 +44,32 @@ class CsvFileCreator:
             writer.writeheader()
 
             for item in httpx_results:
-                row = {
-                    'URL': item.get('line', ''),
-                    'Status': item.get('status', ''),
-                    'Title': item.get('title', ''),
-                    'BruteForce': item.get('bruteforce', False),
-                    'Tech': ', '.join(item.get('tech', [])) if item.get('tech') else ''
-                }
-                writer.writerow(row)
+                line = item.get('line', '')
+
+                # Regex for parsing line into components
+                match = re.match(r'^(https?://[^\s]+)\s\[(\d{3})\]\s\[(.*?)\]', line)
+                if match:
+                    url = match.group(1) 
+                    status = match.group(2)  
+                    title_and_tech = match.group(3)  
+
+                    tech = []
+                    title = ''
+                    if ',' in title_and_tech:
+                        parts = title_and_tech.split(',')
+                        title = parts[0].strip() 
+                        tech = [tech_item.strip() for tech_item in parts[1:]]  
+                    else:
+                        title = title_and_tech.strip()
+
+                    row = {
+                        'URL': url,
+                        'Status': status,
+                        'Title': title,
+                        'BruteForce': item.get('bruteforce', False),
+                        'Tech': ', '.join(tech)
+                    }
+                    writer.writerow(row)
 
         logger.success(f"✅ CSV file (first scan) created: {file_path}")
         return file_path
