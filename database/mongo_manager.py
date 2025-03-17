@@ -10,6 +10,8 @@ class MongoManager:
         self.program_name = program_name.replace('.', '_').replace('-', '_')
         self.domain_name = domain_name.replace('.', '_').replace('-', '_') if domain_name else None
 
+        # اتصال به MongoDB
+        logger.debug(f"🔌 Connecting to MongoDB at {self.mongo_uri}")
         self.client = pymongo.MongoClient(self.mongo_uri)
         self.db = self.client[f"{self.program_name}_db"]
 
@@ -20,8 +22,9 @@ class MongoManager:
             self.httpx = None
             self.updates = None
 
-    # ---------- STATIC METHODS ----------
-    
+    # =========================
+    #   STATIC METHODS
+    # =========================
     @staticmethod
     def get_client():
         logger.debug("🔌 Getting MongoDB client")
@@ -45,7 +48,9 @@ class MongoManager:
         client.close()
         return programs
 
-    # ---------- INSTANCE METHODS ----------
+    # =========================
+    #   INSTANCE METHODS
+    # =========================
 
     def list_domains(self):
         logger.debug(f"🔎 Listing domains for program `{self.program_name}`")
@@ -57,10 +62,17 @@ class MongoManager:
                 domain = coll.replace("_httpx_results", "")
                 domains.append(domain)
 
+        if not domains:
+            logger.warning(f"⚠️ No domains found for program `{self.program_name}`.")
+        else:
+            logger.success(f"✅ Found {len(domains)} domains for program `{self.program_name}`:")
+            for d in domains:
+                logger.info(f"- {d}")
+
         return domains
 
     def drop_program(self):
-        logger.warning(f"⚠️ Dropping entire program `{self.program_name}` and its data...")
+        logger.warning(f"⚠️ Dropping entire program `{self.program_name}` and all its data...")
         self.client.drop_database(f"{self.program_name}_db")
         logger.success(f"✅ Program `{self.program_name}` has been dropped.")
 
@@ -74,23 +86,22 @@ class MongoManager:
 
         logger.success(f"✅ Domain `{domain_clean}` has been dropped from program `{self.program_name}`.")
 
-    # ---------- DATA OPERATIONS ----------
+    # =========================
+    #   DATA OPERATIONS
+    # =========================
 
     def update_httpx(self, httpx_data):
-        if not self.httpx:
+        if self.httpx is None:
             logger.error("❌ No domain selected. Cannot update HTTPX data.")
             return []
 
         changes = []
-        logger.info(f"🔧 Processing httpx results for `{self.domain_name}`... Total: {len(httpx_data)}")
+        logger.info(f"🔧 Processing httpx results for `{self.domain_name}`... Total items: {len(httpx_data)}")
 
         for item in httpx_data:
-            if isinstance(item, str):
-                line = item
-                is_bruteforce = False
-            else:
-                line = item.get("line", "")
-                is_bruteforce = item.get("bruteforce", False)
+            # Parse item
+            line = item if isinstance(item, str) else item.get("line", "")
+            is_bruteforce = False if isinstance(item, str) else item.get("bruteforce", False)
 
             logger.debug(f"⚙️ Processing line: {line}")
 
@@ -102,9 +113,9 @@ class MongoManager:
                 continue
 
             url = url_match.group(1)
-            status = brackets[0] if len(brackets) >= 1 else ""
-            title = brackets[1] if len(brackets) >= 2 else ""
-            tech_raw = brackets[2] if len(brackets) >= 3 else ""
+            status = brackets[0] if len(brackets) > 0 else ""
+            title = brackets[1] if len(brackets) > 1 else ""
+            tech_raw = brackets[2] if len(brackets) > 2 else ""
             tech = [t.strip() for t in tech_raw.split(",")] if tech_raw else []
 
             doc = {
@@ -122,10 +133,10 @@ class MongoManager:
                 doc["created_at"] = datetime.utcnow()
                 self.httpx.insert_one(doc)
                 changes.append({"type": "new", "data": doc})
-                logger.success(f"🆕 Inserted: {url} (bruteforce: {is_bruteforce})")
-
+                logger.success(f"🆕 Inserted new entry: {url} (bruteforce: {is_bruteforce})")
             else:
                 diff = {}
+
                 for field in ["status", "title", "tech"]:
                     if existing.get(field) != doc[field]:
                         diff[field] = {"old": existing.get(field), "new": doc[field]}
@@ -147,37 +158,37 @@ class MongoManager:
                 })
 
                 changes.append({"type": "update", "url": url, "diff": diff})
-                logger.success(f"🔄 Updated: {url} with changes: {diff}")
+                logger.success(f"🔄 Updated entry: {url} with changes: {diff}")
 
-        logger.success(f"✅ Finished httpx processing. Total changes: {len(changes)}")
+        logger.success(f"✅ Finished processing httpx results. Changes detected: {len(changes)}")
         return changes
 
     def get_httpx_data(self, query=None):
-        if not self.httpx:
+        if self.httpx is None:
             logger.error("❌ No domain selected for fetching HTTPX data.")
             return []
 
         query = query or {}
-        logger.debug(f"🔎 Fetching HTTPX data with query: {query}")
+        logger.debug(f"🔎 Fetching HTTPX data for `{self.domain_name}` with query: {query}")
         return list(self.httpx.find(query, {"_id": 0}))
 
     def get_update_logs(self):
-        if not self.updates:
+        if self.updates is None:
             logger.error("❌ No domain selected for fetching update logs.")
             return []
 
-        logger.debug("🔎 Fetching update logs")
+        logger.debug(f"🔎 Fetching update logs for `{self.domain_name}`")
         return list(self.updates.find({}, {"_id": 0}))
 
     def get_bruteforce_only(self):
-        if not self.httpx:
-            logger.error("❌ No domain selected for fetching bruteforce results.")
+        if self.httpx is None:
+            logger.error("❌ No domain selected for fetching bruteforce entries.")
             return []
 
         query = {"bruteforce": True}
-        logger.debug("🔎 Fetching bruteforce-only subdomains")
+        logger.debug(f"🔎 Fetching bruteforce subdomains for `{self.domain_name}`")
         return list(self.httpx.find(query, {"_id": 0}))
 
     def close(self):
         self.client.close()
-        logger.debug("🔒 MongoDB connection closed")
+        logger.debug("🔒 MongoDB connection closed.")
