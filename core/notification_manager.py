@@ -1,7 +1,7 @@
 from helpers.helpers import Helpers
 from utils import logger
 
-
+helper = Helpers()
 # Thresholds
 MAX_DISPLAY_NEW = 15
 MAX_DISPLAY_UPDATE = 10
@@ -28,7 +28,7 @@ class NotificationManager:
         msg_lines.append(f"🌐 *Active Subdomains* ({len(httpx_results)}):")
 
         for item in httpx_results[:MAX_DISPLAY_NEW]:
-            msg_lines.append(Helpers.subdomain_filter(item))
+            msg_lines.append(helper.subdomain_filter(item))
 
         if len(httpx_results) > MAX_DISPLAY_NEW:
             msg_lines.append(f"...and `{len(httpx_results) - MAX_DISPLAY_NEW}` more active subdomains.")
@@ -38,7 +38,7 @@ class NotificationManager:
             msg_lines.append("")
             msg_lines.append(f"🛡️ *DNS Bruteforce Subdomains* ({len(bruteforce_filtered)}):")
             for item in bruteforce_filtered[:MAX_DISPLAY_BRUTEFORCE]:
-                msg_lines.append(Helpers.subdomain_filter(item))
+                msg_lines.append(helper.subdomain_filter(item))
 
             if len(bruteforce_filtered) > MAX_DISPLAY_BRUTEFORCE:
                 msg_lines.append(f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more found by bruteforce.")
@@ -65,7 +65,7 @@ class NotificationManager:
             msg_lines.append(f"🆕 *New Subdomains* ({len(new_items)}):")
             for item in new_items[:MAX_DISPLAY_NEW]:
                 subdomain = item.get("data", {})
-                msg_lines.append(Helpers.subdomain_filter(subdomain))
+                msg_lines.append(helper.subdomain_filter(subdomain))
 
             if len(new_items) > MAX_DISPLAY_NEW:
                 msg_lines.append(f"...and `{len(new_items) - MAX_DISPLAY_NEW}` more new subdomains.")
@@ -92,7 +92,7 @@ class NotificationManager:
             msg_lines.append(f"🛡️ *New DNS Bruteforce Subdomains* ({len(new_bruteforce_items)}):")
             for item in new_bruteforce_items[:MAX_DISPLAY_BRUTEFORCE]:
                 subdomain = item.get("data", {})
-                msg_lines.append(Helpers.subdomain_filter(subdomain))
+                msg_lines.append(helper.subdomain_filter(subdomain))
 
             if len(new_bruteforce_items) > MAX_DISPLAY_BRUTEFORCE:
                 msg_lines.append(f"...and `{len(new_bruteforce_items) - MAX_DISPLAY_BRUTEFORCE}` more bruteforce subdomains.")
