@@ -22,7 +22,7 @@ class DomainProcessor:
         self.mongo = MongoManager(settings.MONGO_URI, program_name, domain)
         self.scanner = Scanner(settings.RESOLVER_PATH)
         notification_sender = NotificationSender(domain)
-        notification_manager = NotificationManager(domain , notification_sender)
+        self.notification_manager = NotificationManager(domain , notification_sender)
 
     def process(self, fetcher_results):
         logger.info(f"🔎 Processing domain: {self.domain}")
