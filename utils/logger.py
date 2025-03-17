@@ -12,3 +12,6 @@ def warning(message):
 
 def error(message):
     print(f"{Fore.RED}[ERROR]{Style.RESET_ALL} {message}")
+
+def debug(message):  
+    print(f"[DEBUG] {message}")
