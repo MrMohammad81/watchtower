@@ -1,6 +1,6 @@
 from utils import logger
 import os
-from notifier import TelegramNotifier , DiscordNotifier
+from services.notifier import TelegramNotifier, DiscordNotifier
 from core.csv_file_creator import CsvFileCreator
 
 

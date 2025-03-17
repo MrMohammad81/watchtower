@@ -5,7 +5,6 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
-
 from core.domain_processor import DomainProcessor
 from core.subdomain_fetcher import SubdomainFetcher
 from database.mongo_manager import MongoManager
