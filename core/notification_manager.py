@@ -1,14 +1,11 @@
 from helpers.helpers import Helpers
 from utils import logger
-from database.mongo_manager import MongoManager
-from config import settings
-from services.notification_sender import NotificationSender
 
 
 # Thresholds
-MAX_DISPLAY_NEW = 10
-MAX_DISPLAY_UPDATE = 5
-MAX_DISPLAY_BRUTEFORCE = 5
+MAX_DISPLAY_NEW = 15
+MAX_DISPLAY_UPDATE = 10
+MAX_DISPLAY_BRUTEFORCE = 10
 ALLOWED_STATUS_CODES = ['200', '403', '404']
 
 class NotificationManager:
@@ -36,7 +33,7 @@ class NotificationManager:
                 msg_lines.append(f"...and `{len(bruteforce_filtered) - MAX_DISPLAY_BRUTEFORCE}` more found by bruteforce.")
 
         final_msg = "\n".join(msg_lines)
-        logger.info("✅ First scan notification composed.")
+        logger.info("✅ First scan notification composed.{final_msg}")
 
         # Send notification + CSV always
         self.notification_sender.send_notifications(final_msg, httpx_results, is_first_scan=True)
