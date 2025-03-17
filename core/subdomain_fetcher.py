@@ -211,9 +211,9 @@ class SubdomainFetcher:
         logger.info(f"Fetching subdomains from all sources for {domain}")
         all_subdomains = set()
 
-       # all_subdomains.update(self.from_crtsh(domain))
+        all_subdomains.update(self.from_crtsh(domain))
         #all_subdomains.update(self.from_subfinder(domain))
-        all_subdomains.update(self.from_github_subdomains(domain))
+       # all_subdomains.update(self.from_github_subdomains(domain))
        # all_subdomains.update(self.from_shodan(domain))
        # all_subdomains.update(self.from_urlscan(domain))
       #  all_subdomains.update(self.from_rapiddns(domain))
