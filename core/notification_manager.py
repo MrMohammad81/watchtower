@@ -25,7 +25,7 @@ class NotificationManager:
         
         if httpx_results:
             msg_lines.append("")
-        msg_lines.append(f"🌐 *Active Subdomains* ({len(httpx_results)}):")
+            msg_lines.append(f"🌐 *Active Subdomains* ({len(httpx_results)}):")
 
         for item in httpx_results[:MAX_DISPLAY_NEW]:
             msg_lines.append(helper.subdomain_filter(item))
