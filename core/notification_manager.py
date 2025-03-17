@@ -1,5 +1,9 @@
 from helpers.helpers import Helpers
 from utils import logger
+from database.mongo_manager import MongoManager
+from config import settings
+from services.notification_sender import NotificationSender
+
 
 # Thresholds
 MAX_DISPLAY_NEW = 10
@@ -8,9 +12,10 @@ MAX_DISPLAY_BRUTEFORCE = 5
 ALLOWED_STATUS_CODES = ['200', '403', '404']
 
 class NotificationManager:
-    def __init__(self , domain, notification_sender):
+    def __init__(self , domain, program_name):
         self.domain = domain
-        self.notification_sender = notification_sender
+        self.mongo = MongoManager(settings.MONGO_URI, program_name, domain)
+        self.notification_sender = NotificationSender()
         
     def notify_first_scan(self, count_results, httpx_results):
         bruteforce_filtered = self._get_filtered_bruteforce()
