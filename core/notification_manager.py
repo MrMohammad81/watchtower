@@ -3,8 +3,8 @@ from utils import logger
 
 helper = Helpers()
 # Thresholds
-MAX_DISPLAY_NEW = 15
-MAX_DISPLAY_UPDATE = 10
+MAX_DISPLAY_NEW = 5
+MAX_DISPLAY_UPDATE = 5
 MAX_DISPLAY_BRUTEFORCE = 10
 ALLOWED_STATUS_CODES = ['200', '403', '404']
 
