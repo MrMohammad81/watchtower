@@ -10,8 +10,7 @@ class MongoManager:
         self.program_name = program_name.replace('.', '_').replace('-', '_')
         self.domain_name = domain_name.replace('.', '_').replace('-', '_') if domain_name else None
 
-        # اتصال به MongoDB
-        logger.debug(f"🔌 Connecting to MongoDB at {self.mongo_uri}")
+        logger.debug(f"🔌 Connecting to MongoDB...")
         self.client = pymongo.MongoClient(self.mongo_uri)
         self.db = self.client[f"{self.program_name}_db"]
 
