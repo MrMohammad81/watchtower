@@ -1,6 +1,6 @@
 from helpers.helpers import Helpers
 from utils import logger
-from database.mongo_manager import MongoManager
+
 
 # Thresholds
 MAX_DISPLAY_NEW = 15
@@ -9,10 +9,10 @@ MAX_DISPLAY_BRUTEFORCE = 10
 ALLOWED_STATUS_CODES = ['200', '403', '404']
 
 class NotificationManager:
-    def __init__(self, domain, program_name, notification_sender):
+    def __init__(self, domain, program_name, mongo, notification_sender):
         self.domain = domain
         self.program_name = program_name
-        self.mongo = MongoManager()
+        self.mongo = mongo
         self.notification_sender = notification_sender
         
     def notify_first_scan(self, count_results, httpx_results):
@@ -22,6 +22,17 @@ class NotificationManager:
             f"✅ *First Scan Completed* for `{self.domain}`",
             f"🔎 Discovered `{count_results}` unique subdomains."
         ]
+        
+        if httpx_results:
+            msg_lines.append("")
+        msg_lines.append(f"🌐 *Active Subdomains* ({len(httpx_results)}):")
+
+        for item in httpx_results[:MAX_DISPLAY_NEW]:
+            msg_lines.append(Helpers.subdomain_filter(item))
+
+        if len(httpx_results) > MAX_DISPLAY_NEW:
+            msg_lines.append(f"...and `{len(httpx_results) - MAX_DISPLAY_NEW}` more active subdomains.")
+
 
         if bruteforce_filtered:
             msg_lines.append("")
