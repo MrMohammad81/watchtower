@@ -41,8 +41,6 @@ class MongoManager:
         client = MongoManager.get_client()
         dbs = client.list_database_names()
 
-        if verbose:
-            logger.debug(f"📂 Raw databases: {dbs}")
 
         programs = [db.replace('_db', '') for db in dbs if db.endswith('_db')]
 
