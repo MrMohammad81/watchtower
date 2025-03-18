@@ -4,13 +4,14 @@ from utils import logger
 from datetime import datetime
 from config import settings
 
+
 class MongoManager:
     def __init__(self, mongo_uri, program_name, domain_name=None):
         self.mongo_uri = mongo_uri
         self.program_name = program_name.replace('.', '_').replace('-', '_')
         self.domain_name = domain_name.replace('.', '_').replace('-', '_') if domain_name else None
 
-        logger.debug(f"🔌 Connecting to MongoDB...")
+        logger.debug("🔌 Connecting to MongoDB...")
         self.client = pymongo.MongoClient(self.mongo_uri)
         self.db = self.client[f"{self.program_name}_db"]
 
@@ -50,16 +51,11 @@ class MongoManager:
     # =========================
     #   INSTANCE METHODS
     # =========================
-
     def list_domains(self):
         logger.debug(f"🔎 Listing domains for program `{self.program_name}`")
         collections = self.db.list_collection_names()
 
-        domains = []
-        for coll in collections:
-            if coll.endswith("_httpx_results"):
-                domain = coll.replace("_httpx_results", "")
-                domains.append(domain)
+        domains = [coll.replace("_httpx_results", "") for coll in collections if coll.endswith("_httpx_results")]
 
         if not domains:
             logger.warning(f"⚠️ No domains found for program `{self.program_name}`.")
@@ -88,7 +84,6 @@ class MongoManager:
     # =========================
     #   DATA OPERATIONS
     # =========================
-
     def update_httpx(self, httpx_data):
         if self.httpx is None:
             logger.error("❌ No domain selected. Cannot update HTTPX data.")
@@ -163,30 +158,74 @@ class MongoManager:
         return changes
 
     def get_httpx_data(self, query=None):
-        if self.httpx is None:
-            logger.error("❌ No domain selected for fetching HTTPX data.")
-            return []
-
         query = query or {}
-        logger.debug(f"🔎 Fetching HTTPX data for `{self.domain_name}` with query: {query}")
-        return list(self.httpx.find(query, {"_id": 0}))
+
+        if self.domain_name:
+            if self.httpx is None:
+                logger.error("❌ No domain selected for fetching HTTPX data.")
+                return []
+
+            logger.debug(f"🔎 Fetching HTTPX data for `{self.domain_name}` with query: {query}")
+            return list(self.httpx.find(query, {"_id": 0}))
+
+        logger.info(f"🔎 Fetching HTTPX data for ALL domains in `{self.program_name}`")
+        all_results = []
+
+        domain_names = self.list_domains()
+        for domain in domain_names:
+            collection = self.db[f"{domain}_httpx_results"]
+            logger.debug(f"📂 Fetching from `{domain}` with query: {query}")
+            results = list(collection.find(query, {"_id": 0}))
+            all_results.extend(results)
+
+        logger.success(f"✅ Fetched {len(all_results)} results from all domains.")
+        return all_results
 
     def get_update_logs(self):
-        if self.updates is None:
-            logger.error("❌ No domain selected for fetching update logs.")
-            return []
+        if self.domain_name:
+            if self.updates is None:
+                logger.error("❌ No domain selected for fetching update logs.")
+                return []
 
-        logger.debug(f"🔎 Fetching update logs for `{self.domain_name}`")
-        return list(self.updates.find({}, {"_id": 0}))
+            logger.debug(f"🔎 Fetching update logs for `{self.domain_name}`")
+            return list(self.updates.find({}, {"_id": 0}))
+
+        logger.info(f"🔎 Fetching update logs for ALL domains in `{self.program_name}`")
+        all_updates = []
+
+        domain_names = self.list_domains()
+        for domain in domain_names:
+            collection = self.db[f"{domain}_update_logs"]
+            logger.debug(f"📂 Fetching update logs from `{domain}`")
+            updates = list(collection.find({}, {"_id": 0}))
+            all_updates.extend(updates)
+
+        logger.success(f"✅ Fetched {len(all_updates)} updates from all domains.")
+        return all_updates
 
     def get_bruteforce_only(self):
-        if self.httpx is None:
-            logger.error("❌ No domain selected for fetching bruteforce entries.")
-            return []
-
         query = {"bruteforce": True}
-        logger.debug(f"🔎 Fetching bruteforce subdomains for `{self.domain_name}`")
-        return list(self.httpx.find(query, {"_id": 0}))
+
+        if self.domain_name:
+            if self.httpx is None:
+                logger.error("❌ No domain selected for fetching bruteforce entries.")
+                return []
+
+            logger.debug(f"🔎 Fetching bruteforce subdomains for `{self.domain_name}`")
+            return list(self.httpx.find(query, {"_id": 0}))
+
+        logger.info(f"🔎 Fetching bruteforce subdomains for ALL domains in `{self.program_name}`")
+        all_bruteforce = []
+
+        domain_names = self.list_domains()
+        for domain in domain_names:
+            collection = self.db[f"{domain}_httpx_results"]
+            logger.debug(f"📂 Fetching bruteforce results from `{domain}`")
+            results = list(collection.find(query, {"_id": 0}))
+            all_bruteforce.extend(results)
+
+        logger.success(f"✅ Fetched {len(all_bruteforce)} bruteforce subdomains from all domains.")
+        return all_bruteforce
 
     def close(self):
         self.client.close()
