@@ -35,8 +35,11 @@ class MongoManager:
         client = MongoManager.get_client()
 
         dbs = client.list_database_names()
+        logger.error(f"📂 Raw databases: {dbs}")
+        
         programs = [db.replace('_db', '') for db in dbs if db.endswith('_db')]
-
+        logger.error(f"✅ Filtered programs: {programs}")
+         
         client.close()
         return programs
 
