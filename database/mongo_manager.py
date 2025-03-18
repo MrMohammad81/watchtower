@@ -4,14 +4,13 @@ from utils import logger
 from datetime import datetime
 from config import settings
 
-
 class MongoManager:
     def __init__(self, mongo_uri, program_name, domain_name=None):
         self.mongo_uri = mongo_uri
         self.program_name = program_name.replace('.', '_').replace('-', '_')
         self.domain_name = domain_name.replace('.', '_').replace('-', '_') if domain_name else None
 
-        logger.debug("🔌 Connecting to MongoDB...")
+        logger.debug(f"🔌 Connecting to MongoDB...")
         self.client = pymongo.MongoClient(self.mongo_uri)
         self.db = self.client[f"{self.program_name}_db"]
 
@@ -38,13 +37,6 @@ class MongoManager:
         dbs = client.list_database_names()
         programs = [db.replace('_db', '') for db in dbs if db.endswith('_db')]
 
-        if not programs:
-            logger.warning("⚠️ No programs found in MongoDB.")
-        else:
-            logger.success(f"✅ Found {len(programs)} programs:")
-            for p in programs:
-                logger.info(f"- {p}")
-
         client.close()
         return programs
 
@@ -55,14 +47,11 @@ class MongoManager:
         logger.debug(f"🔎 Listing domains for program `{self.program_name}`")
         collections = self.db.list_collection_names()
 
-        domains = [coll.replace("_httpx_results", "") for coll in collections if coll.endswith("_httpx_results")]
-
-        if not domains:
-            logger.warning(f"⚠️ No domains found for program `{self.program_name}`.")
-        else:
-            logger.success(f"✅ Found {len(domains)} domains for program `{self.program_name}`:")
-            for d in domains:
-                logger.info(f"- {d}")
+        domains = []
+        for coll in collections:
+            if coll.endswith("_httpx_results"):
+                domain = coll.replace("_httpx_results", "")
+                domains.append(domain)
 
         return domains
 
@@ -93,7 +82,6 @@ class MongoManager:
         logger.info(f"🔧 Processing httpx results for `{self.domain_name}`... Total items: {len(httpx_data)}")
 
         for item in httpx_data:
-            # Parse item
             line = item if isinstance(item, str) else item.get("line", "")
             is_bruteforce = False if isinstance(item, str) else item.get("bruteforce", False)
 
@@ -164,7 +152,7 @@ class MongoManager:
             if self.httpx is None:
                 logger.error("❌ No domain selected for fetching HTTPX data.")
                 return []
-
+            
             logger.debug(f"🔎 Fetching HTTPX data for `{self.domain_name}` with query: {query}")
             return list(self.httpx.find(query, {"_id": 0}))
 
@@ -186,7 +174,7 @@ class MongoManager:
             if self.updates is None:
                 logger.error("❌ No domain selected for fetching update logs.")
                 return []
-
+            
             logger.debug(f"🔎 Fetching update logs for `{self.domain_name}`")
             return list(self.updates.find({}, {"_id": 0}))
 
@@ -210,7 +198,7 @@ class MongoManager:
             if self.httpx is None:
                 logger.error("❌ No domain selected for fetching bruteforce entries.")
                 return []
-
+            
             logger.debug(f"🔎 Fetching bruteforce subdomains for `{self.domain_name}`")
             return list(self.httpx.find(query, {"_id": 0}))
 
