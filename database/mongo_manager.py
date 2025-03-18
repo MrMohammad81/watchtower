@@ -1,8 +1,10 @@
-import pymongo
 import re
-from utils import logger
+import pymongo
 from datetime import datetime
+
+from utils import logger
 from config import settings
+
 
 class MongoManager:
     def __init__(self, mongo_uri, program_name, domain_name=None):
@@ -10,7 +12,7 @@ class MongoManager:
         self.program_name = program_name.replace('.', '_').replace('-', '_')
         self.domain_name = domain_name.replace('.', '_').replace('-', '_') if domain_name else None
 
-        logger.debug(f"🔌 Connecting to MongoDB...")
+        logger.debug("🔌 Connecting to MongoDB...")
         self.client = pymongo.MongoClient(self.mongo_uri)
         self.db = self.client[f"{self.program_name}_db"]
 
@@ -22,30 +24,43 @@ class MongoManager:
             self.updates = None
 
     # =========================
-    #   STATIC METHODS
+    #        STATIC METHODS
     # =========================
+    
     @staticmethod
     def get_client():
         logger.debug("🔌 Getting MongoDB client")
         return pymongo.MongoClient(settings.MONGO_URI)
 
     @staticmethod
-    def list_programs():
-        logger.debug("🔎 Listing all programs in MongoDB...")
-        client = MongoManager.get_client()
-
-        dbs = client.list_database_names()
-        logger.error(f"📂 Raw databases: {dbs}")
+    def list_programs(verbose=True):
         
+        if verbose:
+            logger.debug("🔎 Listing all programs in MongoDB...")
+
+        client = MongoManager.get_client()
+        dbs = client.list_database_names()
+
+        if verbose:
+            logger.debug(f"📂 Raw databases: {dbs}")
+
         programs = [db.replace('_db', '') for db in dbs if db.endswith('_db')]
-        logger.error(f"✅ Filtered programs: {programs}")
-         
+
+        if verbose:
+            if not programs:
+                logger.warning("⚠️ No programs found in MongoDB.")
+            else:
+                logger.success(f"✅ Found {len(programs)} programs:")
+                for p in programs:
+                    logger.info(f"- {p}")
+
         client.close()
         return programs
 
     # =========================
-    #   INSTANCE METHODS
+    #       INSTANCE METHODS
     # =========================
+
     def list_domains(self):
         logger.debug(f"🔎 Listing domains for program `{self.program_name}`")
         collections = self.db.list_collection_names()
@@ -67,15 +82,14 @@ class MongoManager:
         domain_clean = domain_name.replace('.', '_').replace('-', '_')
 
         logger.warning(f"⚠️ Dropping domain `{domain_clean}` inside program `{self.program_name}`...")
-
         self.db.drop_collection(f"{domain_clean}_httpx_results")
         self.db.drop_collection(f"{domain_clean}_update_logs")
-
         logger.success(f"✅ Domain `{domain_clean}` has been dropped from program `{self.program_name}`.")
 
     # =========================
-    #   DATA OPERATIONS
+    #       DATA OPERATIONS
     # =========================
+
     def update_httpx(self, httpx_data):
         if self.httpx is None:
             logger.error("❌ No domain selected. Cannot update HTTPX data.")
@@ -121,7 +135,6 @@ class MongoManager:
                 logger.success(f"🆕 Inserted new entry: {url} (bruteforce: {is_bruteforce})")
             else:
                 diff = {}
-
                 for field in ["status", "title", "tech"]:
                     if existing.get(field) != doc[field]:
                         diff[field] = {"old": existing.get(field), "new": doc[field]}
@@ -135,7 +148,6 @@ class MongoManager:
 
                 doc["created_at"] = existing.get("created_at", datetime.utcnow())
                 self.httpx.update_one({"url": url}, {"$set": doc})
-
                 self.updates.insert_one({
                     "url": url,
                     "diff": diff,
@@ -155,15 +167,14 @@ class MongoManager:
             if self.httpx is None:
                 logger.error("❌ No domain selected for fetching HTTPX data.")
                 return []
-            
+
             logger.debug(f"🔎 Fetching HTTPX data for `{self.domain_name}` with query: {query}")
             return list(self.httpx.find(query, {"_id": 0}))
 
         logger.info(f"🔎 Fetching HTTPX data for ALL domains in `{self.program_name}`")
         all_results = []
 
-        domain_names = self.list_domains()
-        for domain in domain_names:
+        for domain in self.list_domains():
             collection = self.db[f"{domain}_httpx_results"]
             logger.debug(f"📂 Fetching from `{domain}` with query: {query}")
             results = list(collection.find(query, {"_id": 0}))
@@ -177,15 +188,14 @@ class MongoManager:
             if self.updates is None:
                 logger.error("❌ No domain selected for fetching update logs.")
                 return []
-            
+
             logger.debug(f"🔎 Fetching update logs for `{self.domain_name}`")
             return list(self.updates.find({}, {"_id": 0}))
 
         logger.info(f"🔎 Fetching update logs for ALL domains in `{self.program_name}`")
         all_updates = []
 
-        domain_names = self.list_domains()
-        for domain in domain_names:
+        for domain in self.list_domains():
             collection = self.db[f"{domain}_update_logs"]
             logger.debug(f"📂 Fetching update logs from `{domain}`")
             updates = list(collection.find({}, {"_id": 0}))
@@ -201,15 +211,14 @@ class MongoManager:
             if self.httpx is None:
                 logger.error("❌ No domain selected for fetching bruteforce entries.")
                 return []
-            
+
             logger.debug(f"🔎 Fetching bruteforce subdomains for `{self.domain_name}`")
             return list(self.httpx.find(query, {"_id": 0}))
 
         logger.info(f"🔎 Fetching bruteforce subdomains for ALL domains in `{self.program_name}`")
         all_bruteforce = []
 
-        domain_names = self.list_domains()
-        for domain in domain_names:
+        for domain in self.list_domains():
             collection = self.db[f"{domain}_httpx_results"]
             logger.debug(f"📂 Fetching bruteforce results from `{domain}`")
             results = list(collection.find(query, {"_id": 0}))
