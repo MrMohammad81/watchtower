@@ -33,26 +33,33 @@ class MongoManager:
         return pymongo.MongoClient(settings.MONGO_URI)
 
     @staticmethod
-    def list_programs(verbose=True):
-        
-        if verbose:
-            logger.debug("🔎 Listing all programs in MongoDB...")
-
+    def list_programs():
+        logger.debug("🔎 Listing all programs in Watchtower...")
         client = MongoManager.get_client()
+
         dbs = client.list_database_names()
-
-
         programs = [db.replace('_db', '') for db in dbs if db.endswith('_db')]
 
-        if verbose:
-            if not programs:
-                logger.warning("⚠️ No programs found in MongoDB.")
-            else:
-                logger.success(f"✅ Found {len(programs)} programs:")
-                for p in programs:
-                    logger.info(f"- {p}")
+        separator = "─" * 50
 
+        if not programs:
+            logger.warning("⚠️ No programs found in MongoDB.")
+            client.close()
+            return []
+
+        print(f"\n{separator}")
+        print(f"📂 MongoDB Programs")
+        print(f"📊 Total Programs Found: {len(programs)}")
+        print(separator)
+
+        for program in programs:
+            print(f"🔸 {program}")
+
+        print(f"{separator}\n")
+
+        logger.success(f"✅ Finished listing programs in MongoDB.")
         client.close()
+
         return programs
 
     # =========================
@@ -63,11 +70,10 @@ class MongoManager:
         logger.debug(f"🔎 Listing domains for program `{self.program_name}`")
         collections = self.db.list_collection_names()
 
-        domains = []
-        for coll in collections:
-            if coll.endswith("_httpx_results"):
-                domain = coll.replace("_httpx_results", "")
-                domains.append(domain)
+        domains = [
+            coll.replace("_httpx_results", "")
+            for coll in collections if coll.endswith("_httpx_results")
+        ]
 
         return domains
 
