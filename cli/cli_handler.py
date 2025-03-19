@@ -190,10 +190,25 @@ def handle_show_httpx(args):
 
     if not results:
         logger.warning("⚠️ No results found.")
-    else:
-        logger.success(f"✅ Found {len(results)} entries:")
-        for res in results:
-            logger.info(f"{res['url']} [{res['status']}] {res['title']} {res['tech']}")
+        mongo.close()
+        return
+
+    logger.success(f"✅ Found {len(results)} entries:\n")
+
+    separator = "─" * 50
+
+    for res in results:
+        url = res.get('url', '-')
+        status = res.get('status', '-')
+        title = res.get('title', '-')
+        tech = res.get('tech', [])
+
+        print(separator)
+        print(f"🌐 URL        : {url}\n")
+        print(f"🔹 Status     : {status}")
+        print(f"🔹 Title      : {title}")
+        print(f"🔹 Tech       : {tech if tech else '[]'}\n")
+        print(separator + "\n")
 
     mongo.close()
 
@@ -203,21 +218,38 @@ def handle_show_new(args):
     domain_name = args.domain_name
     mongo = MongoManager(settings.MONGO_URI, program_name, domain_name)
 
+    logger.info(f"📄 Querying NEW entries for `{program_name}`, domain `{domain_name or 'ALL'}`...")
+
     yesterday = datetime.utcnow() - timedelta(days=1)
     query = {"created_at": {"$gte": yesterday}}
     query.update(build_query_from_filters(args))
 
-    logger.info(f"📄 Querying NEW entries for `{program_name}`, domain `{domain_name or 'ALL'}`...")
     results = mongo.get_httpx_data(query=query)
 
     if not results:
         logger.warning("⚠️ No new subdomains found.")
-    else:
-        logger.success(f"✅ Found {len(results)} new subdomains:")
-        for res in results:
-            logger.info(f"{res['url']} [{res['status']}] {res['title']} {res['tech']}")
+        mongo.close()
+        return
+
+    logger.success(f"✅ Found {len(results)} new subdomains:\n")
+
+    separator = "─" * 50
+
+    for res in results:
+        url = res.get('url', '-')
+        status = res.get('status', '-')
+        title = res.get('title', '-')
+        tech = res.get('tech', [])
+
+        print(separator)
+        print(f"🌐 URL        : {url}\n")
+        print(f"🔹 Status     : {status}")
+        print(f"🔹 Title      : {title}")
+        print(f"🔹 Tech       : {tech if tech else '[]'}\n")
+        print(separator + "\n")
 
     mongo.close()
+
 
 
 def handle_show_updates(args):
