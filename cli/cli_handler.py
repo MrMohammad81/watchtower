@@ -155,16 +155,28 @@ def main_cli():
 
 def handle_domains(program_name):
     mongo = MongoManager(settings.MONGO_URI, program_name=program_name)
-
+    
     domains = mongo.list_domains()
     mongo.close()
 
+    separator = "─" * 50
+
     if not domains:
         logger.warning(f"⚠️ No domains found for program `{program_name}`.")
-    else:
-        logger.success(f"✅ Found {len(domains)} domains in program `{program_name}`:")
-        for d in domains:
-            logger.info(f"- {d}")
+        return
+
+    print(f"\n{separator}")
+    print(f"🌐 Program        : {program_name}")
+    print(f"📅 Domains Found  : {len(domains)}")
+    print(separator)
+
+    for domain in domains:
+        print(f"🔹 {domain}")
+
+    print(f"{separator}\n")
+
+    logger.success(f"✅ Finished listing domains for program `{program_name}`.")
+
 
 
 def handle_drop(program_name, domain_name=None):
