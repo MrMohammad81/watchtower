@@ -188,21 +188,21 @@ class MongoManager:
         return all_results
 
     def get_update_logs(self, query=None):
+        if self.updates is None and self.domain_name:
+            logger.error("❌ No domain selected for fetching update logs.")
+            return []
+
         query = query or {}
 
         if self.domain_name:
-            if self.updates is None:
-                logger.error("❌ No domain selected for fetching update logs.")
-                return []
-
             logger.debug(f"🔎 Fetching update logs for `{self.domain_name}` with query: {query}")
             return list(self.updates.find(query, {"_id": 0}))
 
+    
         logger.info(f"🔎 Fetching update logs for ALL domains in `{self.program_name}`")
 
         all_domains = self.list_domains()
         results = []
-
         for domain in all_domains:
             updates_coll = self.db[f"{domain}_update_logs"]
             logger.debug(f"📂 Fetching update logs from `{domain}` with query: {query}")
@@ -211,6 +211,8 @@ class MongoManager:
         logger.success(f"✅ Fetched {len(results)} updates from all domains.")
         return results
 
+
+    
     def get_bruteforce_only(self):
         query = {"bruteforce": True}
 
