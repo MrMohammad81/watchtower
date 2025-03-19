@@ -230,16 +230,28 @@ def handle_show_updates(args):
 
     if not updates:
         logger.warning("⚠️ No updated subdomains found.")
-    else:
-        logger.success(f"✅ Found {len(updates)} updated subdomains:")
-        for upd in updates:
-            url = upd.get("url", "N/A")
-            diff = upd.get("diff", {})
-            logger.info(f"- {url}")
-            for field, change in diff.items():
-                old_val = change.get("old", "-")
-                new_val = change.get("new", "-")
-                logger.info(f"  • {field.capitalize()}: {old_val} ➜ {new_val}")
+        mongo.close()
+        return
+
+    logger.success(f"✅ Found {len(updates)} updated subdomains:\n")
+
+    separator = "─" * 50
+
+    for upd in updates:
+        url = upd.get("url", "N/A")
+        diff = upd.get("diff", {})
+        
+        print(separator)
+        print(f"🌐 URL: {url}\n")
+        
+        for field, change in diff.items():
+            old_val = change.get("old", "-")
+            new_val = change.get("new", "-")
+
+            field_name = field.capitalize().ljust(8)
+            print(f"🔹 {field_name}: {old_val} ➜ {new_val}")
+        
+        print(separator + "\n")
 
     mongo.close()
 
