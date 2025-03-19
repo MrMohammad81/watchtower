@@ -26,7 +26,7 @@ class MongoManager:
     # =========================
     #        STATIC METHODS
     # =========================
-    
+
     @staticmethod
     def get_client():
         logger.debug("🔌 Getting MongoDB client")
@@ -187,26 +187,29 @@ class MongoManager:
         logger.success(f"✅ Fetched {len(all_results)} results from all domains.")
         return all_results
 
-    def get_update_logs(self):
+    def get_update_logs(self, query=None):
+        query = query or {}
+
         if self.domain_name:
             if self.updates is None:
                 logger.error("❌ No domain selected for fetching update logs.")
                 return []
 
-            logger.debug(f"🔎 Fetching update logs for `{self.domain_name}`")
-            return list(self.updates.find({}, {"_id": 0}))
+            logger.debug(f"🔎 Fetching update logs for `{self.domain_name}` with query: {query}")
+            return list(self.updates.find(query, {"_id": 0}))
 
         logger.info(f"🔎 Fetching update logs for ALL domains in `{self.program_name}`")
-        all_updates = []
 
-        for domain in self.list_domains():
-            collection = self.db[f"{domain}_update_logs"]
-            logger.debug(f"📂 Fetching update logs from `{domain}`")
-            updates = list(collection.find({}, {"_id": 0}))
-            all_updates.extend(updates)
+        all_domains = self.list_domains()
+        results = []
 
-        logger.success(f"✅ Fetched {len(all_updates)} updates from all domains.")
-        return all_updates
+        for domain in all_domains:
+            updates_coll = self.db[f"{domain}_update_logs"]
+            logger.debug(f"📂 Fetching update logs from `{domain}` with query: {query}")
+            results += list(updates_coll.find(query, {"_id": 0}))
+
+        logger.success(f"✅ Fetched {len(results)} updates from all domains.")
+        return results
 
     def get_bruteforce_only(self):
         query = {"bruteforce": True}

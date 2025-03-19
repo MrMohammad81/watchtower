@@ -269,8 +269,11 @@ def handle_show_updates(args):
     domain_name = args.domain_name
     mongo = MongoManager(settings.MONGO_URI, program_name, domain_name)
 
-    logger.info(f"📄 Fetching update logs for `{program_name}`, domain `{domain_name or 'ALL'}`...")
-    updates = mongo.get_update_logs()
+    query_filters = build_query_from_filters(args)
+
+    logger.info(f"📄 Fetching update logs for `{program_name}`, domain `{domain_name or 'ALL'}` with filters: {query_filters}")
+
+    updates = mongo.get_update_logs(query=query_filters)
 
     if not updates:
         logger.warning("⚠️ No updated subdomains found.")
@@ -287,14 +290,14 @@ def handle_show_updates(args):
         
         print(separator)
         print(f"🌐 URL: {url}\n")
-        
+
         for field, change in diff.items():
             old_val = change.get("old", "-")
             new_val = change.get("new", "-")
 
             field_name = field.capitalize().ljust(8)
             print(f"🔹 {field_name}: {old_val} ➜ {new_val}")
-        
+
         print(separator + "\n")
 
     mongo.close()
