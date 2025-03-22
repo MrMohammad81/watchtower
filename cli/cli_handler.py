@@ -24,24 +24,29 @@ def parse_targets_file(yaml_file):
 
 
 def run_update():
+    project_dir = os.path.dirname(os.path.abspath(__file__)) 
+    project_root = os.path.abspath(os.path.join(project_dir, "..")) 
+    git_dir = os.path.join(project_root, ".git")
+
     logger.info("🔄 Checking for updates from GitHub...")
 
-    try:
-        # Auto-stash before pulling updates
-        subprocess.run(["git", "stash"], cwd=os.getcwd())
+    if not os.path.exists(git_dir):
+        logger.error("❌ This is not a git repository. Cannot perform update!")
+        return
 
-        result = subprocess.run(["git", "pull"], cwd=os.getcwd(), capture_output=True, text=True)
+    try:
+        subprocess.run(["git", "stash"], cwd=project_root)
+
+        result = subprocess.run(["git", "pull"], cwd=project_root, capture_output=True, text=True)
 
         if result.returncode == 0:
             logger.success("✅ Project updated successfully!")
             print(result.stdout)
-
-            # Optional: auto-pop stash after pull
-            subprocess.run(["git", "stash", "pop"], cwd=os.getcwd())
-
         else:
             logger.error("❌ Failed to update project:")
             print(result.stderr)
+
+        subprocess.run(["git", "stash", "pop"], cwd=project_root)
 
     except Exception as e:
         logger.error(f"⚠️ Error during update: {e}")
