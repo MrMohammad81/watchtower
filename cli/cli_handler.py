@@ -25,18 +25,27 @@ def parse_targets_file(yaml_file):
 
 def run_update():
     logger.info("🔄 Checking for updates from GitHub...")
+
     try:
-        cwd = os.getcwd()
-        result = subprocess.run(["git", "pull"], cwd=cwd, capture_output=True, text=True)
+        # Auto-stash before pulling updates
+        subprocess.run(["git", "stash"], cwd=os.getcwd())
+
+        result = subprocess.run(["git", "pull"], cwd=os.getcwd(), capture_output=True, text=True)
 
         if result.returncode == 0:
             logger.success("✅ Project updated successfully!")
             print(result.stdout)
+
+            # Optional: auto-pop stash after pull
+            subprocess.run(["git", "stash", "pop"], cwd=os.getcwd())
+
         else:
             logger.error("❌ Failed to update project:")
             print(result.stderr)
+
     except Exception as e:
         logger.error(f"⚠️ Error during update: {e}")
+
 
 
 def process_domain(domain, program_name):
