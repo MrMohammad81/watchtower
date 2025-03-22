@@ -11,3 +11,4 @@ CHAOS_API_KEY = "your_chaos_api_key"
 GITHUB_TOKEN = "your_github_token"
 WORDLIST_PATH = os.path.join(BASE_DIR, 'config', 'wordlist.txt')
 RESOLVER_PATH = os.path.join(BASE_DIR, 'config', 'resolver.txt')
+
