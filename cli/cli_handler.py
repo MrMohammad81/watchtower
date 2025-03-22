@@ -24,29 +24,66 @@ def parse_targets_file(yaml_file):
 
 
 def run_update():
-    project_dir = os.path.dirname(os.path.abspath(__file__)) 
-    project_root = os.path.abspath(os.path.join(project_dir, "..")) 
-    git_dir = os.path.join(project_root, ".git")
+    
+    project_root = os.path.dirname(os.path.abspath(__file__))  
+    project_root = os.path.abspath(os.path.join(project_root, '..')) 
 
     logger.info("🔄 Checking for updates from GitHub...")
 
-    if not os.path.exists(git_dir):
-        logger.error("❌ This is not a git repository. Cannot perform update!")
+    if not os.path.exists(os.path.join(project_root, '.git')):
+        logger.error("❌ This directory is not a git repository. Can't perform updates.")
         return
 
     try:
-        subprocess.run(["git", "stash"], cwd=project_root)
+       
+        logger.info("📦 Stashing local changes (if any)...")
+        stash_result = subprocess.run(
+            ["git", "stash", "--include-untracked"],
+            cwd=project_root,
+            capture_output=True,
+            text=True
+        )
+        logger.debug(stash_result.stdout.strip())
 
-        result = subprocess.run(["git", "pull"], cwd=project_root, capture_output=True, text=True)
+        
+        pull_result = subprocess.run(
+            ["git", "pull"],
+            cwd=project_root,
+            capture_output=True,
+            text=True
+        )
 
-        if result.returncode == 0:
+        if pull_result.returncode == 0:
             logger.success("✅ Project updated successfully!")
-            print(result.stdout)
+            print(pull_result.stdout.strip())
         else:
             logger.error("❌ Failed to update project:")
-            print(result.stderr)
+            print(pull_result.stderr.strip())
+            return 
 
-        subprocess.run(["git", "stash", "pop"], cwd=project_root)
+        
+        logger.info("📂 Restoring stashed changes (if any)...")
+        pop_result = subprocess.run(
+            ["git", "stash", "pop"],
+            cwd=project_root,
+            capture_output=True,
+            text=True
+        )
+
+        if "No stash entries found" in pop_result.stderr:
+            logger.info("ℹ️ No stashed changes to apply.")
+        else:
+            logger.info("✅ Restored stashed changes.")
+            logger.debug(pop_result.stdout.strip())
+
+        status_result = subprocess.run(
+            ["git", "status"],
+            cwd=project_root,
+            capture_output=True,
+            text=True
+        )
+        logger.info("📌 Git status after update:")
+        print(status_result.stdout.strip())
 
     except Exception as e:
         logger.error(f"⚠️ Error during update: {e}")
