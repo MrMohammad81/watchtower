@@ -2,6 +2,7 @@ import argparse
 import yaml
 import tldextract
 import subprocess
+import os
 import sys
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor
@@ -25,12 +26,9 @@ def parse_targets_file(yaml_file):
 def run_update():
     logger.info("🔄 Checking for updates from GitHub...")
     try:
-        result = subprocess.run(
-            ["git", "pull"],
-            cwd="/usr/local/watchtower",
-            capture_output=True,
-            text=True
-        )
+        cwd = os.getcwd()
+        result = subprocess.run(["git", "pull"], cwd=cwd, capture_output=True, text=True)
+
         if result.returncode == 0:
             logger.success("✅ Project updated successfully!")
             print(result.stdout)

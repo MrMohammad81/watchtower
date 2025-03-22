@@ -83,7 +83,7 @@ dnsgen
    Add this function to your `~/.bashrc` or `~/.zshrc`:
    ```bash
    watchtower() {
-       python3 /usr/local/watchtower/main.py "$@"
+       python3 /app/main.py "$@"
    }
    ```
 
@@ -94,7 +94,7 @@ dnsgen
 
 ---
 
-## 🐋 Docker Support (Optional)
+## 🐛 Docker Support (Optional)
 
 ### Build Docker Image
 ```bash
@@ -145,7 +145,7 @@ WORDLIST_PATH = "data/wordlist.txt"
 
 ---
 
-## 🗄️ MongoDB Integration
+## 📄 MongoDB Integration
 
 Watchtower uses **MongoDB** to store and track discovered subdomains and scan results over time.
 
@@ -237,6 +237,11 @@ watchtower --show-new company1
 watchtower --show-new company1 --status 200 --dns-check true
 ```
 
+### Show Updated Subdomains (With Filters)
+```bash
+watchtower --show-updates company1 --dns-check true
+```
+
 ### Update Project From GitHub
 ```bash
 watchtower --update
@@ -246,15 +251,40 @@ watchtower --update
 
 ## 📢 Notifications
 
-### Telegram Notifications
+### 🔹 Telegram Notifications
 - First-time scan summaries
 - New subdomains discovered
 - Subdomain status/title/tech changes
 - DNS BruteForce discovered subdomains with specific status codes (200, 403, 404)
-- CSV file attachment when too many results
+- CSV file attachment when results are large
 
-### Discord Notifications
+### 🔹 Discord Notifications
 - Same as Telegram but via Discord webhook
+
+---
+
+## 🤖 Telegram Bot Setup
+
+### 🔹 Step 1 - Create Your Bot
+1. Open Telegram and search for `@BotFather`
+2. Send `/start` and then `/newbot`
+3. Give it a name and username (e.g., `watchtower_bot`)
+4. Copy the provided **Bot Token**
+
+### 🔹 Step 2 - Add Bot to Your Group
+1. Create a Telegram group or use an existing one
+2. Add your bot as a member of the group
+3. Make sure the bot has **permission to send messages**
+
+### 🔹 Step 3 - Get the Chat ID
+1. Forward any message from the group to `@userinfobot` or use [this tool](https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates)
+2. Note the **chat ID**, usually starts with `-100`
+
+### 🔹 Step 4 - Update `settings.py`
+```python
+TELEGRAM_BOT_TOKEN = "your_bot_token"
+TELEGRAM_CHAT_ID = "-1001234567890"
+```
 
 ---
 
