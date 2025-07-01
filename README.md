@@ -204,7 +204,7 @@ Document example stored in MongoDB:
 
 ### Run Single Domain Scan
 ```bash
-watchtower -u example.com --threads 10
+watchtower -u example.com
 ```
 
 ### Batch Scan with YAML Targets
