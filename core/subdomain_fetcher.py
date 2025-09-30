@@ -1,8 +1,9 @@
-import subprocess
-import requests
 import os
-import tempfile
 import re
+import subprocess
+import tempfile
+import requests
+
 from utils import logger
 from config import settings
 from requests.adapters import HTTPAdapter
@@ -14,7 +15,7 @@ class SubdomainFetcher:
         self.shodan_api_key = settings.SHODAN_API_KEY
         self.chaos_api_key = settings.CHAOS_API_KEY
         self.session = self.create_session_with_retries()
-        
+
         if settings.GITHUB_TOKEN:
             os.environ['GITHUB_TOKEN'] = settings.GITHUB_TOKEN
             logger.info("[github-subdomains] GITHUB_TOKEN loaded from settings.py")
@@ -27,11 +28,11 @@ class SubdomainFetcher:
             total=3,
             backoff_factor=1,
             status_forcelist=[429, 500, 502, 503, 504],
-            raise_on_status=False
+            raise_on_status=False,
         )
         adapter = HTTPAdapter(max_retries=retries)
-        session.mount('http://', adapter)
-        session.mount('https://', adapter)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
         return session
 
     def from_crtsh(self, domain):
@@ -45,7 +46,7 @@ class SubdomainFetcher:
             data = response.json()
             subdomains = set()
             for entry in data:
-                name_value = entry.get('name_value', '')
+                name_value = entry.get("name_value", "")
                 for sub in name_value.split("\n"):
                     if "*" not in sub:
                         subdomains.add(sub.strip())
@@ -65,6 +66,80 @@ class SubdomainFetcher:
             return subdomains
         except Exception as e:
             logger.error(f"[subfinder] Error: {e}")
+            return []
+
+    def from_dnsdumpster(self, domain, api_key: str | None = None):
+      
+        logger.info(f"[dnsdumpster-api] Fetching subdomains for {domain}")
+
+        key = api_key or getattr(settings, "DNSDUMPSTER_API_KEY", None)
+        if not key:
+            logger.warning("[dnsdumpster-api] No API key provided; request may fail or be limited")
+
+        url = f"https://api.dnsdumpster.com/domain/{domain}"
+        headers = {
+            "X-API-Key": key if key else "",
+            "Accept": "application/json",
+            "Connection": "keep-alive",
+        }
+
+        try:
+            resp = self.session.get(url, headers=headers, timeout=30)
+            if resp.status_code != 200:
+                logger.warning(f"[dnsdumpster-api] returned status {resp.status_code} for {domain}")
+                return []
+
+            try:
+                data = resp.json()
+            except ValueError as e:
+                logger.error(f"[dnsdumpster-api] JSON decode error: {e}")
+                return []
+
+            candidates = set()
+
+            def _collect_hosts(list_or_none):
+                if not list_or_none:
+                    return
+                for item in list_or_none:
+                    host = item.get("host") if isinstance(item, dict) else None
+                    if host:
+                        candidates.add(host)
+
+            _collect_hosts(data.get("a"))
+            _collect_hosts(data.get("cname"))
+            _collect_hosts(data.get("mx"))
+            _collect_hosts(data.get("ns"))
+
+            for key_name, val in data.items():
+                if isinstance(val, list):
+                    for item in val:
+                        if isinstance(item, dict):
+                            h = item.get("host")
+                            if h:
+                                candidates.add(h)
+
+            # normalize, filter and dedupe
+            domain_lower = domain.lower()
+            result = set()
+            for h in candidates:
+                if not isinstance(h, str):
+                    continue
+                s = h.strip().strip("'\"<>(),; ").lower()
+                # remove trailing slash or port if any
+                s = re.sub(r":[0-9]+$", "", s)
+                s = s.rstrip("/")
+                # ignore bare IPs
+                if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", s):
+                    continue
+                # accept only hosts that are the domain or end with .domain
+                if s == domain_lower or s.endswith("." + domain_lower):
+                    result.add(s)
+
+            logger.success(f"[dnsdumpster-api] Found {len(result)} subdomains")
+            return list(result)
+
+        except Exception as e:
+            logger.error(f"[dnsdumpster-api] Error: {e}")
             return []
 
     def from_shodan(self, domain):
@@ -92,9 +167,9 @@ class SubdomainFetcher:
                 return []
             data = response.json()
             subdomains = set()
-            for result in data.get('results', []):
-                task = result.get('task', {})
-                subdomain = task.get('domain')
+            for result in data.get("results", []):
+                task = result.get("task", {})
+                subdomain = task.get("domain")
                 if subdomain:
                     subdomains.add(subdomain)
             logger.success(f"[urlscan.io] Found {len(subdomains)} subdomains")
@@ -112,10 +187,10 @@ class SubdomainFetcher:
                 logger.warning(f"[RapidDNS] returned status {response.status_code} for {domain}")
                 return []
             html = response.text
-            matches = re.findall(r'<td>([^<]*\.[^<]*\.[^<]*)</td>', html)
+            matches = re.findall(r"<td>([^<]*\.[^<]*\.[^<]*)</td>", html)
             clean_subdomains = set()
             for match in matches:
-                cleaned = re.sub(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', '', match).strip()
+                cleaned = re.sub(r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", "", match).strip()
                 if cleaned:
                     clean_subdomains.add(cleaned)
             logger.success(f"[RapidDNS] Found {len(clean_subdomains)} subdomains")
@@ -154,33 +229,25 @@ class SubdomainFetcher:
 
     def from_github_subdomains(self, domain):
         logger.info(f"[github-subdomains] Running for {domain}")
-
         try:
-            # Patch for output file
-            with tempfile.NamedTemporaryFile(mode='w+', delete=False) as temp_out:
+            with tempfile.NamedTemporaryFile(mode="w+", delete=False) as temp_out:
                 output_file = temp_out.name
 
             cmd = f"github-subdomains -d {domain} -q -o {output_file}"
             subprocess.run(cmd, shell=True, executable="/bin/bash", check=True, timeout=60)
 
-            # read output file
-            with open(output_file, 'r') as f:
+            with open(output_file, "r") as f:
                 subdomains = [line.strip() for line in f if line.strip()]
 
             logger.success(f"[github-subdomains] Found {len(subdomains)} subdomains for {domain}")
-
             os.remove(output_file)
-
             return subdomains
-
         except subprocess.CalledProcessError as e:
             logger.error(f"[github-subdomains] Command failed: {e}")
             return []
-
         except subprocess.TimeoutExpired:
             logger.error(f"[github-subdomains] Command timed out for {domain}")
             return []
-
         except Exception as e:
             logger.error(f"[github-subdomains] Error: {e}")
             return []
@@ -213,9 +280,11 @@ class SubdomainFetcher:
 
         all_subdomains.update(self.from_crtsh(domain))
         all_subdomains.update(self.from_subfinder(domain))
+        all_subdomains.update(self.from_dnsdumpster(domain))
         all_subdomains.update(self.from_github_subdomains(domain))
         all_subdomains.update(self.from_shodan(domain))
         all_subdomains.update(self.from_urlscan(domain))
+        all_subdomains.update(self.from_dnsdumpster(domain))
         all_subdomains.update(self.from_rapiddns(domain))
         all_subdomains.update(self.from_subdomain_center(domain))
         all_subdomains.update(self.from_chaos(domain))
@@ -227,11 +296,9 @@ class SubdomainFetcher:
     def filter_in_scope(self, subdomains, domain):
         filtered = []
         domain = domain.lower()
-
         for sub in subdomains:
             sub = sub.strip().lower()
             if sub == domain or sub.endswith(f".{domain}"):
                 filtered.append(sub)
-
         logger.info(f"Filtered {len(filtered)} in-scope subdomains out of {len(subdomains)} total")
         return filtered
