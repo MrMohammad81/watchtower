@@ -28,7 +28,6 @@ def run_update():
     project_root = os.path.dirname(os.path.abspath(__file__))  
     project_root = os.path.abspath(os.path.join(project_root, '..')) 
 
-    logger.info("🔄 Checking for updates from GitHub...")
 
     if not os.path.exists(os.path.join(project_root, '.git')):
         logger.error("❌ This directory is not a git repository. Can't perform updates.")
