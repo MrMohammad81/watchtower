@@ -76,9 +76,21 @@ class DiscordNotifier:
     def __init__(self):
         self.webhook_url = settings.DISCORD_WEBHOOK_URL
 
-    def send(self, message):
-        """Send text message to Discord."""
-        payload = {"content": message}
+    def send(self, message, max_length=1800, preview_lines=20):
+       
+        if len(message) <= max_length:
+            final_message = message
+        else:
+            lines = message.splitlines()
+            preview = "\n".join(lines[:preview_lines])
+            remaining = len(lines) - preview_lines
+
+            final_message = f"{preview}\n...and {remaining} more."
+
+            final_message = final_message[:max_length]
+
+        payload = {"content": final_message}
+
         try:
             response = requests.post(self.webhook_url, json=payload, timeout=10)
             if response.status_code in [200, 204]:
@@ -88,20 +100,3 @@ class DiscordNotifier:
         except Exception as e:
             logger.error(f"❌ Discord send error: {e}")
 
-    def send_file(self, file_path, message=""):
-        """Send a file (CSV) to Discord."""
-        if not os.path.exists(file_path):
-            logger.error(f"❌ File not found: {file_path}")
-            return
-
-        with open(file_path, 'rb') as file:
-            files = {'file': file}
-            data = {'content': message}
-            try:
-                response = requests.post(self.webhook_url, data=data, files=files, timeout=30)
-                if response.status_code in [200, 204]:
-                    logger.success(f"✅ Discord file '{file_path}' sent!")
-                else:
-                    logger.error(f"❌ Discord file error {response.status_code}: {response.text}")
-            except Exception as e:
-                logger.error(f"❌ Discord file send error: {e}")
