@@ -5,7 +5,7 @@ import socket
 from utils import logger
 from config import settings
 
-# --- TelegramNotifier  Forced IPv4 ---
+# --- TelegramNotifier with Forced IPv4 ---
 class TelegramNotifier:
     def __init__(self):
         self.bot_token = settings.TELEGRAM_BOT_TOKEN
@@ -13,7 +13,7 @@ class TelegramNotifier:
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
 
     def _force_ipv4_request(self, func, *args, **kwargs):
-        """اجرای درخواست با forced IPv4"""
+        """Force requests to use IPv4"""
         original_getaddrinfo = socket.getaddrinfo
 
         def forced_ipv4_getaddrinfo(host, port, family=0, socktype=0, proto=0, flags=0):
@@ -27,7 +27,7 @@ class TelegramNotifier:
 
     def send(self, message, retries=3, timeout=20, delay=5):
         url = f"{self.base_url}/sendMessage"
-        payload = {"chat_id": self.chat_id, "text": message, "disable_web_page_preview": True}
+        payload = {"chat_id": self.chat_id, "text": message, "parse_mode": "Markdown", "disable_web_page_preview": True}
 
         for attempt in range(1, retries + 1):
             try:
@@ -56,7 +56,7 @@ class TelegramNotifier:
             try:
                 with open(file_path, "rb") as f:
                     files = {"document": f}
-                    data = {"chat_id": self.chat_id, "caption": caption}
+                    data = {"chat_id": self.chat_id, "caption": caption, "parse_mode": "Markdown"}
                     response = self._force_ipv4_request(requests.post, url, data=data, files=files, timeout=timeout)
                     if response.status_code == 200:
                         logger.success(f"✅ Telegram file '{file_path}' sent!")
@@ -72,7 +72,8 @@ class TelegramNotifier:
         logger.error("❌ Failed to send Telegram file after multiple attempts.")
         return False
 
-# --- DiscordNotifier ---
+
+# --- DiscordNotifier without forced IPv4 ---
 class DiscordNotifier:
     def __init__(self):
         self.webhook_url = settings.DISCORD_WEBHOOK_URL
