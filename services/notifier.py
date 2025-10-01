@@ -4,14 +4,18 @@ import time
 from utils import logger
 from config import settings
 from requests.adapters import HTTPAdapter
-from urllib3.poolmanager import PoolManager
 import socket
 
-# --- Adapter IPv4 ---
+# --- Adapter IPv4 برای تلگرام ---
 class IPv4Adapter(HTTPAdapter):
+    """Force requests to use IPv4 for Telegram connections."""
     def init_poolmanager(self, *args, **kwargs):
         kwargs['socket_options'] = [(socket.AF_INET, socket.SOCK_STREAM, 6)]
         return super().init_poolmanager(*args, **kwargs)
+
+    def proxy_manager_for(self, *args, **kwargs):
+        kwargs['socket_options'] = [(socket.AF_INET, socket.SOCK_STREAM, 6)]
+        return super().proxy_manager_for(*args, **kwargs)
 
 # --- TelegramNotifier ---
 class TelegramNotifier:
@@ -20,10 +24,9 @@ class TelegramNotifier:
         self.chat_id = settings.TELEGRAM_CHAT_ID
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
         self.session = requests.Session()
-        self.session.mount("https://", IPv4Adapter()) 
+        self.session.mount("https://", IPv4Adapter())  # فقط تلگرام روی IPv4
 
     def send(self, message, retries=3, timeout=60, delay=5):
-        """Send text message to Telegram with retries."""
         url = f"{self.base_url}/sendMessage"
         payload = {
             "chat_id": self.chat_id,
@@ -51,21 +54,17 @@ class TelegramNotifier:
         return False
 
     def send_file(self, file_path, caption="", retries=3, timeout=120, delay=5):
-        """Send a file (CSV, Excel, etc.) to Telegram with retries."""
-        url = f"{self.base_url}/sendDocument"
-
         if not os.path.exists(file_path):
             logger.error(f"❌ File not found: {file_path}")
             return False
 
+        url = f"{self.base_url}/sendDocument"
+
         for attempt in range(1, retries + 1):
             try:
-                with open(file_path, 'rb') as file:
-                    files = {'document': file}
-                    data = {
-                        "chat_id": self.chat_id,
-                        "caption": caption
-                    }
+                with open(file_path, 'rb') as f:
+                    files = {'document': f}
+                    data = {"chat_id": self.chat_id, "caption": caption}
                     response = self.session.post(url, data=data, files=files, timeout=timeout)
                     if response.status_code == 200:
                         logger.success(f"✅ Telegram file '{file_path}' sent!")
@@ -83,13 +82,12 @@ class TelegramNotifier:
         logger.error("❌ Failed to send Telegram file after multiple attempts.")
         return False
 
-# --- DiscordNotifier ---
+# --- DiscordNotifier (بدون IPv4 اجباری) ---
 class DiscordNotifier:
     def __init__(self):
         self.webhook_url = settings.DISCORD_WEBHOOK_URL
 
     def send(self, message):
-        """Send text message to Discord."""
         payload = {"content": message}
         try:
             response = requests.post(self.webhook_url, json=payload, timeout=30)
@@ -101,13 +99,12 @@ class DiscordNotifier:
             logger.error(f"❌ Discord send error: {e}")
 
     def send_file(self, file_path, message=""):
-        """Send a file (CSV, Excel, etc.) to Discord."""
         if not os.path.exists(file_path):
             logger.error(f"❌ File not found: {file_path}")
             return
 
-        with open(file_path, 'rb') as file:
-            files = {'file': file}
+        with open(file_path, 'rb') as f:
+            files = {'file': f}
             data = {'content': message}
             try:
                 response = requests.post(self.webhook_url, data=data, files=files, timeout=60)
