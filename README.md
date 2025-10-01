@@ -137,6 +137,7 @@ TELEGRAM_CHAT_ID = "your_chat_id"
 DISCORD_WEBHOOK_URL = "your_discord_webhook_url"
 RESOLVER_PATH = "config/resolver.txt"
 THREADS = 5
+DNSDUMPSTER_API_KEY = "your_dnsdumpsterR_api_key"
 SHODAN_API_KEY = "your_shodan_api_key"
 CHAOS_API_KEY = "your_chaos_api_key"
 GITHUB_TOKEN = "your_github_token"
