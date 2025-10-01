@@ -3,26 +3,37 @@ import os
 import time
 from utils import logger
 from config import settings
+from requests.adapters import HTTPAdapter
+from urllib3.poolmanager import PoolManager
+import socket
 
+# --- Adapter IPv4 ---
+class IPv4Adapter(HTTPAdapter):
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs['socket_options'] = [(socket.AF_INET, socket.SOCK_STREAM, 6)]
+        return super().init_poolmanager(*args, **kwargs)
+
+# --- TelegramNotifier ---
 class TelegramNotifier:
     def __init__(self):
         self.bot_token = settings.TELEGRAM_BOT_TOKEN
         self.chat_id = settings.TELEGRAM_CHAT_ID
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}"
+        self.session = requests.Session()
+        self.session.mount("https://", IPv4Adapter()) 
 
-    def send(self, message, retries=3, timeout=30, delay=5):
+    def send(self, message, retries=3, timeout=60, delay=5):
         """Send text message to Telegram with retries."""
         url = f"{self.base_url}/sendMessage"
         payload = {
             "chat_id": self.chat_id,
             "text": message,
-            "parse_mode": "Markdown",
             "disable_web_page_preview": True
         }
 
         for attempt in range(1, retries + 1):
             try:
-                response = requests.post(url, json=payload, timeout=timeout)
+                response = self.session.post(url, json=payload, timeout=timeout)
                 if response.status_code == 200:
                     logger.success("✅ Telegram message sent!")
                     return True
@@ -39,8 +50,8 @@ class TelegramNotifier:
         logger.error("❌ Failed to send Telegram message after multiple attempts.")
         return False
 
-    def send_file(self, file_path, caption="", retries=3, timeout=60, delay=5):
-        """Send a file (CSV) to Telegram with retries."""
+    def send_file(self, file_path, caption="", retries=3, timeout=120, delay=5):
+        """Send a file (CSV, Excel, etc.) to Telegram with retries."""
         url = f"{self.base_url}/sendDocument"
 
         if not os.path.exists(file_path):
@@ -55,7 +66,7 @@ class TelegramNotifier:
                         "chat_id": self.chat_id,
                         "caption": caption
                     }
-                    response = requests.post(url, data=data, files=files, timeout=timeout)
+                    response = self.session.post(url, data=data, files=files, timeout=timeout)
                     if response.status_code == 200:
                         logger.success(f"✅ Telegram file '{file_path}' sent!")
                         return True
@@ -72,6 +83,7 @@ class TelegramNotifier:
         logger.error("❌ Failed to send Telegram file after multiple attempts.")
         return False
 
+# --- DiscordNotifier ---
 class DiscordNotifier:
     def __init__(self):
         self.webhook_url = settings.DISCORD_WEBHOOK_URL
@@ -80,7 +92,7 @@ class DiscordNotifier:
         """Send text message to Discord."""
         payload = {"content": message}
         try:
-            response = requests.post(self.webhook_url, json=payload, timeout=10)
+            response = requests.post(self.webhook_url, json=payload, timeout=30)
             if response.status_code in [200, 204]:
                 logger.success("✅ Discord message sent!")
             else:
@@ -89,7 +101,7 @@ class DiscordNotifier:
             logger.error(f"❌ Discord send error: {e}")
 
     def send_file(self, file_path, message=""):
-        """Send a file (CSV) to Discord."""
+        """Send a file (CSV, Excel, etc.) to Discord."""
         if not os.path.exists(file_path):
             logger.error(f"❌ File not found: {file_path}")
             return
@@ -98,7 +110,7 @@ class DiscordNotifier:
             files = {'file': file}
             data = {'content': message}
             try:
-                response = requests.post(self.webhook_url, data=data, files=files, timeout=30)
+                response = requests.post(self.webhook_url, data=data, files=files, timeout=60)
                 if response.status_code in [200, 204]:
                     logger.success(f"✅ Discord file '{file_path}' sent!")
                 else:
