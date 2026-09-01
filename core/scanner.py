@@ -6,6 +6,7 @@ from utils import logger
 from core.subdomain_fetcher import SubdomainFetcher
 from config import settings
 
+
 class Scanner:
     def __init__(self, resolver_path):
         self.resolver_path = resolver_path
@@ -38,7 +39,11 @@ class Scanner:
             clean_list.append(d)
 
         unique_domains = list(set(clean_list))
-        logger.info(f"Cleaned {len(unique_domains)} valid subdomains out of {len(subdomains)} total")
+        logger.info(
+            f"Cleaned {len(unique_domains)} valid subdomains "
+            f"out of {len(subdomains)} total"
+        )
+
         return unique_domains
 
     def _run_massdns(self, input_list):
@@ -55,13 +60,20 @@ class Scanner:
             temp_in.flush()
 
         out_file = tempfile.NamedTemporaryFile(delete=False).name
+
         cmd = (
             f"massdns -r {self.resolver_path} -q -t A {temp_in.name} -o S | "
             f"cut -d ' ' -f1 | sed 's/\\.$//g' | sort -u > {out_file}"
         )
 
         try:
-            subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+            subprocess.run(
+                cmd,
+                shell=True,
+                executable='/bin/bash',
+                check=True
+            )
+
         except subprocess.CalledProcessError as e:
             logger.error(f"massdns failed: {e}")
             return []
@@ -73,6 +85,7 @@ class Scanner:
         os.remove(out_file)
 
         logger.success(f"massdns found {len(results)} results")
+
         return results
 
     def _run_puredns_bruteforce(self, wordlist_path, domain):
@@ -87,12 +100,19 @@ class Scanner:
             )
 
             try:
-                subprocess.run(cmd, shell=True, executable='/bin/bash', check=True)
+                subprocess.run(
+                    cmd,
+                    shell=True,
+                    executable='/bin/bash',
+                    check=True
+                )
 
                 with open(output_file, 'r') as f:
                     results = [line.strip() for line in f.readlines()]
 
-                logger.success(f"puredns found {len(results)} subdomains (bruteforce).")
+                logger.success(
+                    f"puredns found {len(results)} subdomains (bruteforce)."
+                )
 
             except subprocess.CalledProcessError as e:
                 logger.error(f"puredns bruteforce failed: {e}")
@@ -118,7 +138,13 @@ class Scanner:
         cmd = f"cat {temp_in.name} | dnsx -silent -a"
 
         try:
-            output = subprocess.check_output(cmd, shell=True, text=True, executable='/bin/bash')
+            output = subprocess.check_output(
+                cmd,
+                shell=True,
+                text=True,
+                executable='/bin/bash'
+            )
+
             results = output.strip().splitlines()
 
         except subprocess.CalledProcessError as e:
@@ -128,6 +154,7 @@ class Scanner:
         os.remove(temp_in.name)
 
         logger.success(f"dnsx found {len(results)} live subdomains")
+
         return results
 
     def _run_httpx(self, subdomains):
@@ -143,13 +170,30 @@ class Scanner:
             temp_in.write('\n'.join(subdomains))
             temp_in.flush()
 
+        # Web ports commonly used for HTTP/HTTPS applications,
+        # admin panels, APIs, dashboards and development services.
+        httpx_ports = (
+            "80,81,443,3000,4000,5000,5601,7001,"
+            "8000,8001,8008,8080,8081,8082,8088,8181,"
+            "8243,8280,8443,8500,8888,9000,9090,9200,"
+            "9443,10000"
+        )
+
         cmd = (
-            f"cat {temp_in.name} | httpx --status-code --title --tech-detect "
-            f"-silent -random-agent -no-color"
+            f"cat {temp_in.name} | "
+            f"httpx --status-code --title --tech-detect "
+            f"-silent -random-agent -no-color "
+            f"-p {httpx_ports}"
         )
 
         try:
-            output = subprocess.check_output(cmd, shell=True, text=True, executable='/bin/bash')
+            output = subprocess.check_output(
+                cmd,
+                shell=True,
+                text=True,
+                executable='/bin/bash'
+            )
+
             results = output.strip().splitlines()
 
         except subprocess.CalledProcessError as e:
@@ -159,6 +203,7 @@ class Scanner:
         os.remove(temp_in.name)
 
         logger.success(f"httpx produced {len(results)} results")
+
         return results
 
     def run_scan_chain(self, fetcher_results, domain):
@@ -166,29 +211,50 @@ class Scanner:
 
         # Step 1: Run puredns bruteforce
         wordlist_path = settings.WORDLIST_PATH
-        puredns_results = self._run_puredns_bruteforce(wordlist_path, domain)
+        puredns_results = self._run_puredns_bruteforce(
+            wordlist_path,
+            domain
+        )
 
         # Step 2: Combine fetcher and puredns results
-        combined_subdomains = list(set(fetcher_results + puredns_results))
-        logger.success(f"Combined subdomains count: {len(combined_subdomains)}")
+        combined_subdomains = list(
+            set(fetcher_results + puredns_results)
+        )
+
+        logger.success(
+            f"Combined subdomains count: {len(combined_subdomains)}"
+        )
 
         # Step 3: massdns resolution on combined results
-        massdns_filtered = self.fetcher.filter_in_scope(self._run_massdns(combined_subdomains), domain)
+        massdns_filtered = self.fetcher.filter_in_scope(
+            self._run_massdns(combined_subdomains),
+            domain
+        )
 
         # Step 4: dnsx live subdomain discovery
         dnsx_out = self._run_dnsx(massdns_filtered)
 
         # Step 5: httpx probing on live subdomains
+        # httpx checks the configured web ports automatically.
         httpx_out = self._run_httpx(dnsx_out)
 
         # Step 6: Flag httpx results that came from puredns
-        puredns_set = set(self.clean_domains(puredns_results))
+        puredns_set = set(
+            self.clean_domains(puredns_results)
+        )
 
         flagged_httpx = []
+
         for line in httpx_out:
             # Extract URL to check the domain
             url = line.split()[0]
-            domain_part = url.replace("https://", "").replace("http://", "").split("/")[0]
+
+            domain_part = (
+                url
+                .replace("https://", "")
+                .replace("http://", "")
+                .split("/")[0]
+            )
 
             is_bruteforce = domain_part in puredns_set
 
@@ -197,7 +263,11 @@ class Scanner:
                 "bruteforce": is_bruteforce
             })
 
-        logger.info(f"Flagged {len([h for h in flagged_httpx if h['bruteforce']])} subdomains from dnsbruteforce")
+        logger.info(
+            f"Flagged "
+            f"{len([h for h in flagged_httpx if h['bruteforce']])} "
+            f"subdomains from dnsbruteforce"
+        )
 
         logger.success(f"Completed scan chain for {domain}")
 
